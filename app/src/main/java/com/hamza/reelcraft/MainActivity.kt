@@ -5,6 +5,8 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.viewModels
+import androidx.compose.animation.*
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Scaffold
@@ -33,7 +35,31 @@ class MainActivity : ComponentActivity() {
                     NavHost(
                         navController = navController,
                         startDestination = "home",
-                        modifier = Modifier.padding(innerPadding)
+                        modifier = Modifier.padding(innerPadding),
+                        enterTransition = {
+                            fadeIn(animationSpec = tween(300)) + slideInHorizontally(
+                                initialOffsetX = { 300 },
+                                animationSpec = tween(300)
+                            )
+                        },
+                        exitTransition = {
+                            fadeOut(animationSpec = tween(300)) + slideOutHorizontally(
+                                targetOffsetX = { -300 },
+                                animationSpec = tween(300)
+                            )
+                        },
+                        popEnterTransition = {
+                            fadeIn(animationSpec = tween(300)) + slideInHorizontally(
+                                initialOffsetX = { -300 },
+                                animationSpec = tween(300)
+                            )
+                        },
+                        popExitTransition = {
+                            fadeOut(animationSpec = tween(300)) + slideOutHorizontally(
+                                targetOffsetX = { 300 },
+                                animationSpec = tween(300)
+                            )
+                        }
                     ) {
                         composable("home") {
                             HomeScreen(
