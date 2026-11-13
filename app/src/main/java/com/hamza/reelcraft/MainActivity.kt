@@ -18,6 +18,7 @@ import com.hamza.reelcraft.ui.ReelViewModel
 import com.hamza.reelcraft.ui.screens.CreateScreen
 import com.hamza.reelcraft.ui.screens.ExportScreen
 import com.hamza.reelcraft.ui.screens.HomeScreen
+import com.hamza.reelcraft.ui.screens.MultiStyleGalleryScreen
 import com.hamza.reelcraft.ui.screens.PreviewScreen
 import com.hamza.reelcraft.ui.screens.SettingsScreen
 import com.hamza.reelcraft.ui.theme.ReelCraftTheme
@@ -86,7 +87,17 @@ class MainActivity : ComponentActivity() {
                             PreviewScreen(
                                 viewModel = viewModel,
                                 onBack = { navController.popBackStack() },
+                                onNavigateMultiStyle = { navController.navigate("multi_style_gallery") },
                                 onNavigateExport = { navController.navigate("export") }
+                            )
+                        }
+                        composable("multi_style_gallery") {
+                            MultiStyleGalleryScreen(
+                                viewModel = viewModel,
+                                onBack = { navController.popBackStack() },
+                                onSelectStyle = { styleName ->
+                                    navController.navigate("export")
+                                }
                             )
                         }
                         composable("export") {

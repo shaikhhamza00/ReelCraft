@@ -279,7 +279,7 @@ fun SettingsScreen(viewModel: ReelViewModel, onBack: () -> Unit) {
             SectionHeader(title = "Gemini API Key Management")
             Spacer(modifier = Modifier.height(8.dp))
             Text(
-                text = "Save and manage your Gemini AI API keys for dynamic reel generation.",
+                text = "Securely encrypted & stored locally using EncryptedSharedPreferences.",
                 style = MaterialTheme.typography.bodyMedium,
                 color = ReelTextSecondary
             )
@@ -309,7 +309,7 @@ fun SettingsScreen(viewModel: ReelViewModel, onBack: () -> Unit) {
                             DropdownMenuItem(
                                 text = { Text(if (key.length > 10) "${key.take(8)}...${key.takeLast(4)}" else key) },
                                 onClick = {
-                                    viewModel.selectedApiKey = key
+                                    viewModel.selectApiKey(key)
                                     expandedKeyDropdown = false
                                 }
                             )
@@ -620,7 +620,12 @@ fun String.toColorType(): Color {
 fun String.toColor(): Color = toColorType()
 
 @Composable
-fun PreviewScreen(viewModel: ReelViewModel, onBack: () -> Unit, onNavigateExport: () -> Unit) {
+fun PreviewScreen(
+    viewModel: ReelViewModel,
+    onBack: () -> Unit,
+    onNavigateMultiStyle: () -> Unit,
+    onNavigateExport: () -> Unit
+) {
     val pagerState = rememberPagerState(pageCount = { viewModel.slides.size })
     val context = LocalContext.current
 
@@ -638,14 +643,13 @@ fun PreviewScreen(viewModel: ReelViewModel, onBack: () -> Unit, onNavigateExport
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center
         ) {
-            // HorizontalPager with 9:16 aspect ratio card and peek (content padding)
             HorizontalPager(
                 state = pagerState,
                 contentPadding = PaddingValues(horizontal = 48.dp),
                 pageSpacing = 16.dp,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(480.dp)
+                    .height(440.dp)
             ) { page ->
                 val slide = viewModel.slides[page]
                 Card(
@@ -663,7 +667,6 @@ fun PreviewScreen(viewModel: ReelViewModel, onBack: () -> Unit, onNavigateExport
                         verticalArrangement = Arrangement.Center,
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
-                        // Small pill badge for template type
                         Surface(
                             shape = CircleShape,
                             color = ReelPrimaryViolet.copy(alpha = 0.25f)
@@ -697,7 +700,7 @@ fun PreviewScreen(viewModel: ReelViewModel, onBack: () -> Unit, onNavigateExport
                 }
             }
 
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(12.dp))
 
             // Page Indicator Dots
             Row(
@@ -716,42 +719,178 @@ fun PreviewScreen(viewModel: ReelViewModel, onBack: () -> Unit, onNavigateExport
             }
         }
 
-        // Bottom Action Buttons: Secondary "Edit text" (outline) and Primary "Export" (gradient)
+        // Bottom Action Buttons
         Surface(
             modifier = Modifier.fillMaxWidth(),
             color = ReelSurface,
             shadowElevation = 8.dp,
             shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp)
         ) {
-            Row(
+            Column(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(20.dp),
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
-                verticalAlignment = Alignment.CenterVertically
+                verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
-                OutlinedButton(
+                // Generate 6 Style Variations button
+                GradientButton(
+                    text = "✨ Compare 6 Style Variations",
+                    isLoading = viewModel.isGenerating,
                     onClick = {
-                        Toast.makeText(context, "Editing slide text...", Toast.LENGTH_SHORT).show()
-                    },
-                    modifier = Modifier
-                        .weight(1f)
-                        .height(54.dp),
-                    shape = RoundedCornerShape(24.dp),
-                    border = BorderStroke(1.5.dp, ReelPrimaryViolet)
+                        viewModel.generateAllStyles(context) {
+                            onNavigateMultiStyle()
+                        }
+                    }
+                )
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
+                    OutlinedButton(
+                        onClick = {
+                            Toast.makeText(context, "Editing slide text...", Toast.LENGTH_SHORT).show()
+                        },
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(50.dp),
+                        shape = RoundedCornerShape(20.dp),
+                        border = BorderStroke(1.5.dp, ReelPrimaryViolet)
+                    ) {
+                        Text(text = "Edit text", color = ReelTextPrimary, fontWeight = FontWeight.Bold)
+                    }
+
+                    Box(modifier = Modifier.weight(1f)) {
+                        OutlinedButton(
+                            onClick = onNavigateExport,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(50.dp),
+                            shape = RoundedCornerShape(20.dp),
+                            border = BorderStroke(1.5.dp, ReelSecondaryCyan)
+                        ) {
+                            Text(text = "Direct Export", color = ReelSecondaryCyan, fontWeight = FontWeight.Bold)
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun MultiStyleGalleryScreen(
+    viewModel: ReelViewModel,
+    onBack: () -> Unit,
+    onSelectStyle: (String) -> Unit
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(ReelBackground)
+    ) {
+        ReelTopBar(title = "Compare 6 Style Variations", onBack = onBack)
+
+        if (viewModel.isGenerating) {
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxWidth(),
+                contentAlignment = Alignment.Center
+            ) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    CircularProgressIndicator(color = ReelPrimaryPink, modifier = Modifier.size(56.dp))
+                    Spacer(modifier = Modifier.height(16.dp))
                     Text(
-                        text = "Edit text",
+                        text = viewModel.exportStatus,
+                        style = MaterialTheme.typography.titleLarge,
                         color = ReelTextPrimary,
-                        fontWeight = FontWeight.Bold
+                        fontSize = 16.sp
                     )
                 }
+            }
+        } else {
+            LazyVerticalGrid(
+                columns = GridCells.Fixed(2),
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                items(viewModel.stylePreviews.entries.toList()) { entry ->
+                    val styleName = entry.key
+                    val videoFile = entry.value
 
-                Box(modifier = Modifier.weight(1f)) {
-                    GradientButton(
-                        text = "Export",
-                        onClick = onNavigateExport
-                    )
+                    Card(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(280.dp)
+                            .clip(RoundedCornerShape(20.dp))
+                            .clickable {
+                                if (videoFile != null) {
+                                    viewModel.selectedThemeName = styleName
+                                    viewModel.exportedVideoFile = videoFile
+                                    onSelectStyle(styleName)
+                                }
+                            },
+                        colors = CardDefaults.cardColors(containerColor = ReelSurface),
+                        shape = RoundedCornerShape(20.dp)
+                    ) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .padding(8.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            Text(
+                                text = styleName,
+                                style = MaterialTheme.typography.labelLarge,
+                                fontWeight = FontWeight.Bold,
+                                color = ReelPrimaryPink,
+                                modifier = Modifier.padding(vertical = 4.dp)
+                            )
+                            Box(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .fillMaxWidth()
+                                    .clip(RoundedCornerShape(14.dp))
+                                    .background(Color.Black)
+                            ) {
+                                if (videoFile != null) {
+                                    AndroidView(
+                                        factory = { ctx ->
+                                            VideoView(ctx).apply {
+                                                setVideoURI(Uri.fromFile(videoFile))
+                                                // loop preview
+                                                setOnPreparedListener { mp -> mp.isLooping = true }
+                                                start()
+                                            }
+                                        },
+                                        modifier = Modifier.fillMaxSize()
+                                    )
+                                }
+                            }
+                            Spacer(modifier = Modifier.height(6.dp))
+                            Button(
+                                onClick = {
+                                    if (videoFile != null) {
+                                        viewModel.selectedThemeName = styleName
+                                        viewModel.exportedVideoFile = videoFile
+                                        onSelectStyle(styleName)
+                                    }
+                                },
+                                shape = RoundedCornerShape(12.dp),
+                                colors = ButtonDefaults.buttonColors(containerColor = ReelPrimaryViolet),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(36.dp)
+                            ) {
+                                Text(text = "Select & Export", fontSize = 12.sp)
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -785,7 +924,6 @@ fun ExportScreen(
         ) {
             when {
                 viewModel.isGenerating -> {
-                    // Rendering state with linear progress and message
                     Card(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -825,11 +963,10 @@ fun ExportScreen(
                 viewModel.exportedVideoFile != null -> {
                     val videoFile = viewModel.exportedVideoFile!!
 
-                    // 9:16 Aspect Ratio Card with rounded corners for video player
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(420.dp)
+                            .height(380.dp)
                             .aspectRatio(9f / 16f)
                             .clip(RoundedCornerShape(28.dp))
                             .background(ReelSurface)
@@ -847,52 +984,7 @@ fun ExportScreen(
                     }
                 }
 
-                viewModel.exportStatus.contains("failed", ignoreCase = true) -> {
-                    // Error state card with retry button
-                    Card(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 24.dp),
-                        colors = CardDefaults.cardColors(containerColor = ReelSurface),
-                        shape = RoundedCornerShape(24.dp)
-                    ) {
-                        Column(
-                            modifier = Modifier.padding(28.dp),
-                            horizontalAlignment = Alignment.CenterHorizontally
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.ErrorOutline,
-                                contentDescription = "Error",
-                                tint = ReelError,
-                                modifier = Modifier.size(48.dp)
-                            )
-                            Spacer(modifier = Modifier.height(16.dp))
-                            Text(
-                                text = "Export Failed",
-                                style = MaterialTheme.typography.titleLarge,
-                                color = ReelTextPrimary,
-                                fontWeight = FontWeight.Bold
-                            )
-                            Spacer(modifier = Modifier.height(8.dp))
-                            Text(
-                                text = viewModel.exportStatus,
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = ReelTextSecondary,
-                                textAlign = TextAlign.Center
-                            )
-                            Spacer(modifier = Modifier.height(20.dp))
-                            GradientButton(
-                                text = "Retry Export",
-                                onClick = {
-                                    viewModel.exportVideo(androidContext) { _ -> }
-                                }
-                            )
-                        }
-                    }
-                }
-
                 else -> {
-                    // Initial State before rendering
                     Column(
                         horizontalAlignment = Alignment.CenterHorizontally,
                         verticalArrangement = Arrangement.Center
@@ -925,7 +1017,6 @@ fun ExportScreen(
             }
         }
 
-        // 3 Actions at bottom when video is successfully exported
         if (viewModel.exportedVideoFile != null) {
             Surface(
                 modifier = Modifier.fillMaxWidth(),
@@ -943,7 +1034,6 @@ fun ExportScreen(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
-                        // 1. Save to Gallery / Saved Button
                         OutlinedButton(
                             onClick = {
                                 isSavedToGallery = true
@@ -970,7 +1060,6 @@ fun ExportScreen(
                             )
                         }
 
-                        // 2. Share Button (Primary Gradient)
                         Box(modifier = Modifier.weight(1f)) {
                             GradientButton(
                                 text = "Share",
@@ -992,7 +1081,6 @@ fun ExportScreen(
                         }
                     }
 
-                    // 3. Create another (Outline Button)
                     OutlinedButton(
                         onClick = onNavigateHome,
                         modifier = Modifier
