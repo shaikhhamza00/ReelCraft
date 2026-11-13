@@ -32,19 +32,42 @@ object AiGenerator {
                 val cleanTopic = if (topic.isBlank()) niche else topic
                 val defaultStyle = SlideData.getDefaultVoiceStyle(niche)
                 val prompt = """
-                    You are an expert viral scriptwriter and cinematic visual designer for Instagram Reels and YouTube Shorts.
-                    Create a highly engaging, fascinating, and deeply informative 6-slide script about the topic '$cleanTopic' in niche '$niche'.
-                    For each slide, provide:
-                    - 'templateType': one of 'story', 'riddle', 'quote', 'listicle'
-                    - 'headline': A punchy, gripping headline or hook in Urdu / Roman Urdu / English.
-                    - 'body': Rich, fascinating, and detailed factual information or story related to the topic.
-                    - 'voiceText': Short voiceover text (8-15 words) for TTS speech synthesis.
-                    - 'voiceStyle': One of 'WHISPER_SLOW', 'ENERGETIC', 'CALM_NARRATOR', 'SUSPENSE', 'SOFT_EMOTIONAL', 'SERENE_MALE'.
-                    - 'bgMood': A mood/setting keyword (e.g., 'horror', 'motivation', 'space', 'islamic', 'shayari', 'riddle', 'sports', 'history', 'nature').
-                    - 'bgScene': One of 'NIGHT_SKY', 'OCEAN', 'FIRE_EMBERS', 'CYBER_GRID', 'AURORA_BOREALIS', 'GOLDEN_SAND', 'MYSTIC_PURPLE'.
-                    - 'sceneSpec': A JSON object with 'layers' (array of objects with 'type' from [GRADIENT_SKY, STARS, MOON_OR_SUN, CLOUDS, WAVES, MOUNTAINS_OR_DUNES, CITY_SILHOUETTE, TREES_FOREST, RAIN_OR_SNOW, EMBERS_OR_SPARKS, BOKEH, GRID_OR_LINES, LIGHT_RAYS, FOG, SHAPES, MOSQUE_SILHOUETTE, SPACE_NEBULA, AURORA, BLOBS_GRADIENT], 'parallaxSpeed' [0.1 to 2.0], 'param1' [10 to 50]).
-                    - 'accentColor': A vibrant hex color code (e.g. '#22D3EE', '#FF4D8D', '#FACC15').
-                    Return ONLY a valid JSON array of 6 objects with these keys. No markdown, pure JSON array.
+                    Tum ek mahir short-video scriptwriter ho jo Urdu/Roman Urdu/Hindi mein viral Reels likhta hai. Tumhara kaam 25-40 second ki voiceover script likhna hai jo viewer ko pehle 3 second mein pakar le aur aakhir tak rokay rakhe. Topic: '$cleanTopic' in niche '$niche'.
+
+                    STRUCTURE (6-8 slides):
+                    1. HOOK (slide 1): 3 second se kam. Seedha ajeeb, khofnaak, hairan karne wali ya sawaliya baat. Taaruf nahi. 'Aaj hum...' ya 'Dosto...' se shuru karna mana hai.
+                    2. SETUP (1-2 slides): maahol aur kirdar, ek khaas tafseel ke saath (waqt, jagah, awaaz, chiz).
+                    3. ESCALATION (2-3 slides): har slide pichli se zyada tension ya hairat. Har slide ka aakhir ek adhoora sawal ya moor ho.
+                    4. TWIST/PAYOFF (1 slide): ghair mutawaqqe, yaad rehne wali baat.
+                    5. LOOP/CLIFFHANGER (aakhri slide): aisa khatma jo pehli slide se jur jaye ya Part 2 ki khwahish chhor de.
+
+                    STYLE KE QAIDE:
+                    - Har slide ka voiceText 8-15 lafz. Chhote jumlay. Bolchal ki zubaan, kitabi nahi. Jaise dost ko raaz bata rahe ho.
+                    - Khaas tafseel use karo: naam, adad, waqt, jagah, awaaz, bu, ehsaas. 'Ek din kuch hua' jaisa aam jumla mana hai.
+                    - Mana hai: 'aaj hum dekhenge', 'dosto', 'is kahani se humein yeh sabaq milta hai', moral lecture, cliche filler, hashiya, aur 'ajeeb', 'dilchasp' jaise khokhle lafz.
+                    - Zubaan: jo language user ne chuni, usi mein. Roman Urdu ho to roz marra bolchal wali (jaise 'main ne', 'wo', 'phir', 'achanak'), ghalat ya ajeeb hijje nahi.
+                    - Har slide ka ek 'emphasisWords' (1-2 sab se ahem lafz as an array of strings).
+
+                    NICHE KE HISAB SE TONE:
+                    - Horror: dheema, sarsarata, tafseeli dehshat. Anjaam mein zabardast twist.
+                    - Story: jazbati, mod aur takrao wala.
+                    - Motivation: sachchi kahani se shuru (naam, shehar, mushkil), phir 1 dhamaakedaar sabaq jo shuru mein hook ban chuka ho.
+                    - Riddle/Quiz: ajeeb sawal, 3 second ki khamoshi ka suspense, phir jawab jo hairat mein daale.
+                    - Facts: 'tumhe pata hai...' ki bajaye seedha hairan kar dene wala adad ya haqiqat.
+                    - Shayari: naram, jazbati, 2-2 misron ke tukron mein.
+                    - Islamic: adab aur sukoon ke saath, sahih hawalay, ghair mustanad baat nahi.
+
+                    FEW-SHOT EXAMPLES (Style learning only, do not copy verbatim):
+                    Example 1 (Horror):
+                    [{"templateType":"story","headline":"Raat 3 baje","body":"Raat 3 baje ammi ne mujhe awaaz di. Masla yeh tha... ammi ko guzre 2 saal ho chuke the.","voiceText":"Raat 3 baje ammi ne mujhe awaaz di.","voiceStyle":"WHISPER_SLOW","bgMood":"horror","bgScene":"NIGHT_SKY","emphasisWords":["raat 3 baje","ammi"],"accentColor":"#FF4D8D"},
+                    {"templateType":"story","headline":"Khamoshi","body":"Main ne razai munh par kheench li. Awaaz phir aayi... bilkul darwaze ke peechay se.","voiceText":"Awaaz phir aayi darwaze ke peechay se.","voiceStyle":"WHISPER_SLOW","bgMood":"horror","bgScene":"NIGHT_SKY","emphasisWords":["razai","peechay"],"accentColor":"#FF4D8D"}]
+
+                    Example 2 (Riddle):
+                    [{"templateType":"riddle","headline":"Dunya ki aisi cheez","body":"Dunya ki aisi kaun si cheez hai jo paida hote hi udne lagti hai? Bina paron ke.","voiceText":"Paida hote hi udne lagti hai bina paron ke.","voiceStyle":"SUSPENSE","bgMood":"riddle","bgScene":"CYBER_GRID","emphasisWords":["udne lagti hai"],"accentColor":"#22D3EE"},
+                    {"templateType":"riddle","headline":"Sochiye","body":"99% log pehli koshish mein haar maan lete hain. Waqt khatam ho raha hai.","voiceText":"99% log haar maan lete hain.","voiceStyle":"SUSPENSE","bgMood":"riddle","bgScene":"CYBER_GRID","emphasisWords":["99% log"],"accentColor":"#22D3EE"}]
+
+                    AKHRI CHEEZ: Pehle andar hi andar 3 alag hook sochho, sab se mazboot wala chuno, aur sirf wohi likho.
+                    Return ONLY a valid JSON array of 6 to 8 objects with keys: 'templateType', 'headline', 'body', 'voiceText', 'voiceStyle', 'bgMood', 'bgScene', 'emphasisWords', 'accentColor'. No markdown, pure JSON array.
                 """.trimIndent()
 
                 val url = URL("https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=$apiKey")
@@ -62,7 +85,7 @@ object AiGenerator {
                             JSONObject().put("text", prompt)
                         ))
                     ))
-                    put("generationConfig", JSONObject().put("responseMimeType", "application/json"))
+                    put("generationConfig", JSONObject().put("responseMimeType", "application/json").put("temperature", 1.1))
                 }
 
                 connection.outputStream.use { os ->
@@ -90,29 +113,7 @@ object AiGenerator {
                         val vText = obj.optString("voiceText", bodyText.take(80))
                         val bgMood = obj.optString("bgMood", niche)
 
-                        // Parser validation: parse custom layers if valid, ignore unknown, clamp params
-                        val sceneSpecJson = obj.optJSONObject("sceneSpec")
-                        val validLayers = mutableListOf<LayerConfig>()
-                        if (sceneSpecJson != null) {
-                            val jsonLayers = sceneSpecJson.optJSONArray("layers")
-                            if (jsonLayers != null) {
-                                for (j in 0 until jsonLayers.length()) {
-                                    val layerObj = jsonLayers.optJSONObject(j) ?: continue
-                                    val typeStr = layerObj.optString("type", "")
-                                    try {
-                                        val layerType = LayerType.valueOf(typeStr.uppercase())
-                                        val parallax = layerObj.optDouble("parallaxSpeed", 1.0).toFloat().coerceIn(0.1f, 2.0f)
-                                        val p1 = layerObj.optDouble("param1", 20.0).toFloat().coerceIn(5f, 60f)
-                                        validLayers.add(LayerConfig(layerType, parallaxSpeed = parallax, param1 = p1))
-                                    } catch (e: Exception) {
-                                        // Ignore unknown layer types safely (zero crash)
-                                    }
-                                }
-                            }
-                        }
-
-                        // If less than 2 valid layers provided by Gemini, use unique contextual preset
-                        val uniqueScene = if (validLayers.size >= 2) bgMood else SceneGenerator.pickUniquePreset(recentPresets, projectSeed + i)
+                        val uniqueScene = SceneGenerator.pickUniquePreset(recentPresets, projectSeed + i)
                         securePrefs.addRecentPresetId(uniqueScene)
 
                         slides.add(
@@ -122,7 +123,7 @@ object AiGenerator {
                                 body = bodyText,
                                 voiceText = vText,
                                 voiceStyle = obj.optString("voiceStyle", defaultStyle),
-                                bgScene = uniqueScene,
+                                bgScene = bgMood.ifBlank { uniqueScene },
                                 accentColor = obj.optString("accentColor", "#22D3EE"),
                                 seed = projectSeed + i
                             )
@@ -132,8 +133,8 @@ object AiGenerator {
                 } else {
                     Log.e(TAG, "Gemini API error code: $responseCode")
                 }
-            } catch (e: Exception) {
-                Log.e(TAG, "Failed to call Gemini API, falling back", e)
+            } catch (_: Exception) {
+                Log.e(TAG, "Failed to call Gemini API, falling back")
             }
             getFallbackSlides(context, niche, topic)
         }
@@ -147,37 +148,30 @@ object AiGenerator {
         val defaultStyle = SlideData.getDefaultVoiceStyle(niche)
 
         val rawSlides = when (niche.lowercase()) {
-            "riddle" -> listOf(
-                SlideData("riddle", "99% log yeh riddle solve nahi kar paate!", "Aisi kaun si cheez hai jo samandar mein paida hoti hai aur ghar mein aate hi mar jati hai? Sochiye!", voiceText = "Aisi kaun si cheez hai jo samandar mein paida hoti hai?", voiceStyle = defaultStyle, accentColor = "#22D3EE"),
-                SlideData("story", "Sochne ka waqt khatam!", "Iska jawab chhipa hai hamari rozmarra ki zindagi mein. Kya aap guess kar paye?", voiceText = "Iska jawab chhipa hai hamari rozmarra ki zindagi mein.", voiceStyle = defaultStyle, accentColor = "#38BDF8"),
-                SlideData("listicle", "Hints jo aapko madad karenge:", "1. Yeh namak se judi hai\n2. Pani mein ghul jati hai", voiceText = "Yeh namak se judi hai aur pani mein ghul jati hai.", voiceStyle = defaultStyle, accentColor = "#4ADE80"),
-                SlideData("quote", "Sahi Jawab:", "Baraf ya Namak! Kaisa laga yeh challenging puzzle?", voiceText = "Sahi jawab hai baraf ya namak!", voiceStyle = defaultStyle, accentColor = "#FACC15"),
-                SlideData("story", "Dimaag ki kasrat jari rakhein", "Aise hi mazedar aur dimaghi riddles ke liye hamare sath jude rahein.", voiceText = "Aise hi mazedar riddles ke liye jude rahein.", voiceStyle = defaultStyle, accentColor = "#C084FC"),
-                SlideData("quote", "Part 2 ke liye follow karein!", "ReelCraft Brain Teasers", voiceText = "Part 2 ke liye follow karein.", voiceStyle = defaultStyle, accentColor = "#F43F5E")
-            )
-            "facts" -> listOf(
-                SlideData("listicle", "Hairan kun Haqeeqat about $cleanTopic", "Kya aap jante hain ke duniya mein kuch aisi baatein hain jo science ko bhi hairan kar deti hain?", voiceText = "Kya aap jante hain yeh hairan kun haqeeqat?", voiceStyle = defaultStyle, accentColor = "#FACC15"),
-                SlideData("story", "Pehla Raaz", "Scientific research ke mutabiq yeh phenomenon sadiyon se chala aa raha hai.", voiceText = "Yeh phenomenon sadiyon se chala aa raha hai.", voiceStyle = defaultStyle, accentColor = "#38BDF8"),
-                SlideData("listicle", "Key Discovery Points:", "1. Unexpected origin\n2. Hidden scientific value", voiceText = "Inke peeche chhupe hain bade raaz.", voiceStyle = defaultStyle, accentColor = "#22D3EE"),
-                SlideData("story", "Gheri Haqeeqat", "Jab scientists ne iski gehrai mein jaakar dekha, to pata chala.", voiceText = "Scientists ne iski gehrai mein jaakar dekha.", voiceStyle = defaultStyle, accentColor = "#E879F9"),
-                SlideData("quote", "Knowledge is Power", "Aisi hi informative aur deep facts ke liye rozana hamari videos dekhein.", voiceText = "Aisi hi informative facts ke liye videos dekhein.", voiceStyle = defaultStyle, accentColor = "#FBBF24"),
-                SlideData("quote", "Share with your friends!", "ReelCraft Knowledge", voiceText = " apne doston ke sath share karein.", voiceStyle = defaultStyle, accentColor = "#34D399")
+            "horror" -> listOf(
+                SlideData("story", "Raat 3 baje", "Raat 3 baje ammi ne mujhe awaaz di. Masla yeh tha... ammi ko guzre 2 saal ho chuke the.", voiceText = "Raat 3 baje ammi ne mujhe awaaz di.", voiceStyle = "WHISPER_SLOW", accentColor = "#FF4D8D"),
+                SlideData("story", "Razai ke andar", "Main ne razai munh par kheench li. Awaaz phir aayi... bilkul darwaze ke peechay se.", voiceText = "Awaaz phir aayi darwaze ke peechay se.", voiceStyle = "WHISPER_SLOW", accentColor = "#FF4D8D"),
+                SlideData("story", "Mobile Screen", "Phir mobile bajaa. Screen par likha tha: Ammi calling.", voiceText = "Mobile screen par likha tha: Ammi calling.", voiceStyle = "SUSPENSE", accentColor = "#FF4D8D"),
+                SlideData("story", "Awaaz", "Main ne call uthayi. Dusri taraf se ammi ki awaaz aayi.", voiceText = "Dusri taraf se ammi ki awaaz aayi.", voiceStyle = "WHISPER_SLOW", accentColor = "#FF4D8D"),
+                SlideData("story", "Che चेतावनी", "'Darwaza mat kholna. Jo bahar hai, wo main nahi hoon.'", voiceText = "'Darwaza mat kholna, wo main nahi hoon.'", voiceStyle = "WHISPER_SLOW", accentColor = "#FF4D8D"),
+                SlideData("story", "Dastak", "Aur phir... achanak darwaze par zor se dastak hui.", voiceText = "Aur phir darwaze par dastak hui.", voiceStyle = "WHISPER_SLOW", accentColor = "#FF4D8D")
             )
             "motivation" -> listOf(
-                SlideData("quote", "Aapki zindagi tab badalti hai jab aap bahane banana chhor dete hain.", "Topic: $cleanTopic", voiceText = "Zindagi tab badalti hai jab bahane chhor dete hain.", voiceStyle = defaultStyle, accentColor = "#FF4D8D"),
-                SlideData("story", "Asli Safar", "Kamyabi raaton raat nahi milti. Iske peeche saalon ki khamosh mehnat hoti hai.", voiceText = "Kamyabi raaton raat nahi milti.", voiceStyle = defaultStyle, accentColor = "#F59E0B"),
-                SlideData("listicle", "3 Golden Rules of Success:", "1. Consistency\n2. Resilience\n3. Focus", voiceText = "Success ke teen golden rules yaad rakhein.", voiceStyle = defaultStyle, accentColor = "#38BDF8"),
-                SlideData("story", "Khud par yaqeen rakhein", "Jab puri duniya aap par shak kare, tab aapka khud par bharosa bada hathiyar banta hai.", voiceText = "Khud par bharosa sabse bada hathiyar hai.", voiceStyle = defaultStyle, accentColor = "#A78BFA"),
-                SlideData("quote", "Aap jo chahte hain wo pa sakte hain.", "Bas haar mat maaniye!", voiceText = "Bas haar mat maaniye!", voiceStyle = defaultStyle, accentColor = "#34D399"),
-                SlideData("quote", "Stay Unstoppable!", "ReelCraft Motivation", voiceText = "Stay unstoppable with ReelCraft.", voiceStyle = defaultStyle, accentColor = "#F43F5E")
+                SlideData("quote", "50 rupay jeb mein", "50 rupay jeb mein aur ek purani cycle lekar us ne shehar chhoda tha.", voiceText = "Pachas rupay aur ek purani cycle.", voiceStyle = "ENERGETIC", accentColor = "#F59E0B"),
+                SlideData("story", "Raatein", "Pehle 3 saal roz bhooke sona pada, logon ne taanay diye.", voiceText = "Pehle 3 saal roz bhooke sona pada.", voiceStyle = "CALM_NARRATOR", accentColor = "#F59E0B"),
+                SlideData("listicle", "Turning Point", "Lekin us ne ek aadat nahi chhodi: roz subah 4 baje uthkar mehnat karna.", voiceText = "Roz subah chaar baje uthkar mehnat.", voiceStyle = "ENERGETIC", accentColor = "#F59E0B"),
+                SlideData("quote", "Asli Sach", "Kamyabi kisi ki mohtaj nahi hoti, bas zid aur consistency chahiye.", voiceText = "Kamyabi ko zid aur consistency chahiye.", voiceStyle = "ENERGETIC", accentColor = "#F59E0B"),
+                SlideData("quote", "Aaj", "Aaj wo usi shehar ka sab se bada CEO hai. Zid karo, haar mat maano.", voiceText = "Aaj wo usi shehar ka sab se bada CEO hai.", voiceStyle = "ENERGETIC", accentColor = "#F59E0B")
+            )
+            "riddle" -> listOf(
+                SlideData("riddle", "Ajeeb sawal", "Dunya ki aisi kaun si cheez hai jo paida hote hi udne lagti hai? Bina paron ke.", voiceText = "Paida hote hi udne lagti hai bina paron ke.", voiceStyle = "SUSPENSE", accentColor = "#22D3EE"),
+                SlideData("story", "Sochiye", "99% log pehli koshish mein haar maan lete hain. Kya aapko pata hai?", voiceText = "99% log pehli koshish mein haar maan gaye.", voiceStyle = "SUSPENSE", accentColor = "#22D3EE"),
+                SlideData("quote", "Jawab", "Sahi jawab hai... dhuan! Kaisa laga?", voiceText = "Sahi jawab hai dhuan!", voiceStyle = "SUSPENSE", accentColor = "#22D3EE")
             )
             else -> listOf(
-                SlideData("story", "Kahani $cleanTopic ki", "Ek aisi gehari aur dilchasp dastan jo aapko shuru se aakhir tak baandh kar rakhegi.", voiceText = "Ek aisi dilchasp dastan.", voiceStyle = defaultStyle, accentColor = "#7C4DFF"),
-                SlideData("story", "Mod aur Haqeeqat", "Har kahani ka aik pehlu hota hai jo samne aata hai.", voiceText = "Har kahani ka aik pehlu hota hai.", voiceStyle = defaultStyle, accentColor = "#C084FC"),
-                SlideData("listicle", "Yeh Khel kahan tak gaya?", "1. Shuruaat\n2. Mod\n3. Anjaam", voiceText = "Yeh safar kahan tak gaya?", voiceStyle = defaultStyle, accentColor = "#38BDF8"),
-                SlideData("story", "Sabaq", "Is safar se humein yehi sabaq milta hai ke waqt sab kuch badal deta hai.", voiceText = "Waqt sab kuch badal deta hai.", voiceStyle = defaultStyle, accentColor = "#FACC15"),
-                SlideData("quote", "Aisi hi aur kahaniyan sunne ke liye", "Jude rahiye hamare sath.", voiceText = "Aisi hi aur kahaniyan sunne ke liye jude rahein.", voiceStyle = defaultStyle, accentColor = "#FB923C"),
-                SlideData("quote", "Part 2 Coming Soon", "ReelCraft Stories", voiceText = "Part 2 coming soon.", voiceStyle = defaultStyle, accentColor = "#22D3EE")
+                SlideData("story", "Ghaflat", "Waqt kisi ke liye nahi rukta. Jab tak aap so rahe hain, koi aur jeet raha hai.", voiceText = "Waqt kisi ke liye nahi rukta.", voiceStyle = "CALM_NARRATOR", accentColor = "#7C4DFF"),
+                SlideData("story", "Faisla", "Aaj ka ek chhota qadam aapka kal badal sakta hai.", voiceText = "Aaj ka ek chhota qadam kal badal dega.", voiceStyle = "CALM_NARRATOR", accentColor = "#7C4DFF"),
+                SlideData("quote", "Utho", "Der mat karo, abhi shuru karo.", voiceText = "Der mat karo, abhi shuru karo.", voiceStyle = "ENERGETIC", accentColor = "#7C4DFF")
             )
         }
 
