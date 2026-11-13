@@ -6,7 +6,8 @@ data class ShortProject(
     val niche: String,
     val language: String,
     val themeName: String,
-    val slides: List<SlideData>
+    val slides: List<SlideData>,
+    val seed: Long = System.currentTimeMillis()
 )
 
 data class SlideData(
@@ -20,7 +21,8 @@ data class SlideData(
     val transition: String = "FADE",
     val durationMs: Long = 3000L,
     val voiceText: String = "", // Short, 8-15 words for speech
-    val voiceStyle: String = "CALM_NARRATOR" // WHISPER_SLOW, ENERGETIC, CALM_NARRATOR, SUSPENSE, SOFT_EMOTIONAL, SERENE_MALE
+    val voiceStyle: String = "CALM_NARRATOR", // WHISPER_SLOW, ENERGETIC, CALM_NARRATOR, SUSPENSE, SOFT_EMOTIONAL, SERENE_MALE
+    val seed: Long = System.currentTimeMillis()
 ) {
     companion object {
         fun getDefaultVoiceStyle(niche: String): String {

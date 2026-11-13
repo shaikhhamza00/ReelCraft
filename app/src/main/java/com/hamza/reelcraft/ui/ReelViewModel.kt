@@ -76,7 +76,7 @@ class ReelViewModel(application: Application) : AndroidViewModel(application) {
     fun generateSlides(onComplete: () -> Unit) {
         isGenerating = true
         viewModelScope.launch {
-            slides = AiGenerator.generateSlidesForTopic(selectedNiche, topicText, selectedApiKey)
+            slides = AiGenerator.generateSlidesForTopic(getApplication(), selectedNiche, topicText, selectedApiKey)
             isGenerating = false
             onComplete()
         }

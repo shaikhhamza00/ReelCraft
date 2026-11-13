@@ -46,6 +46,8 @@ data class SceneSpec(
 )
 
 object SceneGenerator {
+    val presetNames = listOf("NIGHT_SKY", "OCEAN", "FIRE_EMBERS", "CYBER_GRID", "AURORA_BOREALIS", "GOLDEN_SAND", "MYSTIC_PURPLE")
+
     val presets: Map<String, SceneSpec> = mapOf(
         "NIGHT_SKY" to SceneSpec(
             name = "NIGHT_SKY",
@@ -125,19 +127,43 @@ object SceneGenerator {
         )
     )
 
-    fun getSpec(name: String): SceneSpec {
+    fun getSpec(name: String, seed: Long): SceneSpec {
         val upper = name.uppercase().trim()
-        val found = presets[upper]
-        if (found != null) {
-            return found
+        val baseSpec = presets[upper] ?: generateFromSeed(seed, upper)
+
+        // Step 2: Seed-based palette variation (Hue +- 30 deg, saturation, brightness)
+        val rng = Random(seed)
+        val adjustedPalette = baseSpec.palette.mapIndexed { idx, color ->
+            adjustColor(color, seed, idx)
         }
-        return generateFromSeed(upper)
+
+        // Step 2: Seed-based layer variations (speeds, particle density, wave amplitudes)
+        val adjustedLayers = baseSpec.layers.map { layer ->
+            layer.copy(
+                parallaxSpeed = (layer.parallaxSpeed * (0.8f + rng.nextFloat() * 0.4f)).coerceIn(0.1f, 2.0f),
+                param1 = layer.param1 * (0.7f + rng.nextFloat() * 0.6f),
+                colors = layer.colors.ifEmpty { adjustedPalette }
+            )
+        }
+
+        return baseSpec.copy(
+            palette = adjustedPalette,
+            layers = adjustedLayers
+        )
     }
 
-    private fun generateFromSeed(seed: String): SceneSpec {
-        val hash = abs(seed.hashCode())
-        val rng = Random(hash.toLong())
+    private fun adjustColor(color: Int, seed: Long, index: Int): Int {
+        val rng = Random(seed + index)
+        val hsv = FloatArray(3)
+        Color.colorToHSV(color, hsv)
+        hsv[0] = (hsv[0] + rng.nextFloat() * 60f - 30f + 360f) % 360f
+        hsv[1] = (hsv[1] * (0.85f + rng.nextFloat() * 0.3f)).coerceIn(0f, 1f)
+        hsv[2] = (hsv[2] * (0.9f + rng.nextFloat() * 0.2f)).coerceIn(0f, 1f)
+        return Color.HSVToColor(hsv)
+    }
 
+    private fun generateFromSeed(seed: Long, seedStr: String): SceneSpec {
+        val rng = Random(seed)
         val palettes = listOf(
             listOf(Color.parseColor("#0F172A"), Color.parseColor("#312E81"), Color.parseColor("#09090B")),
             listOf(Color.parseColor("#1E1B4B"), Color.parseColor("#831843"), Color.parseColor("#0F172A")),
@@ -148,7 +174,8 @@ object SceneGenerator {
             listOf(Color.parseColor("#2E1065"), Color.parseColor("#701A75"), Color.parseColor("#09090B")),
             listOf(Color.parseColor("#14532D"), Color.parseColor("#065F46"), Color.parseColor("#020617"))
         )
-        val palette = palettes[rng.nextInt(palettes.size)]
+        val basePalette = palettes[rng.nextInt(palettes.size)]
+        val palette = basePalette.mapIndexed { idx, c -> adjustColor(c, seed, idx) }
 
         val numLayers = rng.nextInt(3, 7)
         val selectedLayers = mutableListOf<LayerConfig>()
@@ -166,16 +193,25 @@ object SceneGenerator {
         for (i in 0 until numLayers) {
             val t = possibleLayers[rng.nextInt(possibleLayers.size)]
             if (selectedLayers.none { it.type == t }) {
-                val speed = 0.3f + (i * 0.3f)
-                selectedLayers.add(LayerConfig(t, parallaxSpeed = speed.coerceIn(0.2f, 1.9f), colors = palette, param1 = rng.nextFloat() * 30f + 10f))
+                val speed = 0.3f + (rng.nextFloat() * 1.5f)
+                selectedLayers.add(LayerConfig(t, parallaxSpeed = speed, colors = palette, param1 = rng.nextFloat() * 30f + 10f))
             }
         }
 
         return SceneSpec(
-            name = seed.ifBlank { "GEN_${hash}" },
+            name = seedStr.ifBlank { "GEN_$seed" },
             palette = palette,
             intensity = 1.0f,
             layers = selectedLayers
         )
+    }
+
+    fun pickUniquePreset(recentPresets: List<String>, seed: Long): String {
+        val rng = Random(seed)
+        val available = presetNames.filter { !recentPresets.contains(it) }
+        if (available.isEmpty()) {
+            return presetNames[rng.nextInt(presetNames.size)]
+        }
+        return available[rng.nextInt(available.size)]
     }
 }

@@ -1,6 +1,8 @@
 package com.hamza.reelcraft.data
 
+import android.content.Context
 import android.util.Log
+import com.hamza.reelcraft.model.SceneGenerator
 import com.hamza.reelcraft.model.SlideData
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -14,9 +16,13 @@ import java.net.URL
 object AiGenerator {
     private const val TAG = "AiGenerator"
 
-    suspend fun generateSlidesForTopic(niche: String, topic: String, apiKey: String): List<SlideData> {
+    suspend fun generateSlidesForTopic(context: Context, niche: String, topic: String, apiKey: String): List<SlideData> {
+        val securePrefs = SecurePreferences(context)
+        val recentPresets = securePrefs.getRecentPresetIds()
+        val projectSeed = System.currentTimeMillis()
+
         if (apiKey.isBlank()) {
-            return getFallbackSlides(niche, topic)
+            return getFallbackSlides(context, niche, topic)
         }
 
         return withContext(Dispatchers.IO) {
@@ -78,6 +84,11 @@ object AiGenerator {
                         val obj = jsonArray.getJSONObject(i)
                         val bodyText = obj.optString("body", "Body content")
                         val vText = obj.optString("voiceText", bodyText.take(80))
+
+                        // Step 2: Ensure unique preset compared to last 3 recent presets
+                        val uniqueScene = SceneGenerator.pickUniquePreset(recentPresets, projectSeed + i)
+                        securePrefs.addRecentPresetId(uniqueScene)
+
                         slides.add(
                             SlideData(
                                 templateType = obj.optString("templateType", "story"),
@@ -85,8 +96,9 @@ object AiGenerator {
                                 body = bodyText,
                                 voiceText = vText,
                                 voiceStyle = obj.optString("voiceStyle", defaultStyle),
-                                bgScene = obj.optString("bgScene", "NIGHT_SKY"),
-                                accentColor = obj.optString("accentColor", "#22D3EE")
+                                bgScene = uniqueScene,
+                                accentColor = obj.optString("accentColor", "#22D3EE"),
+                                seed = projectSeed + i
                             )
                         )
                     }
@@ -97,45 +109,58 @@ object AiGenerator {
             } catch (e: Exception) {
                 Log.e(TAG, "Failed to call Gemini API, falling back", e)
             }
-            getFallbackSlides(niche, topic)
+            getFallbackSlides(context, niche, topic)
         }
     }
 
-    private fun getFallbackSlides(niche: String, topic: String): List<SlideData> {
+    private fun getFallbackSlides(context: Context, niche: String, topic: String): List<SlideData> {
+        val securePrefs = SecurePreferences(context)
+        val recentPresets = securePrefs.getRecentPresetIds()
+        val projectSeed = System.currentTimeMillis()
         val cleanTopic = if (topic.isBlank()) niche else topic
         val defaultStyle = SlideData.getDefaultVoiceStyle(niche)
-        return when (niche.lowercase()) {
+
+        val rawSlides = when (niche.lowercase()) {
             "riddle" -> listOf(
-                SlideData("riddle", "99% log yeh riddle solve nahi kar paate!", "Aisi kaun si cheez hai jo samandar mein paida hoti hai aur ghar mein aate hi mar jati hai? Sochiye!", voiceText = "Aisi kaun si cheez hai jo samandar mein paida hoti hai?", voiceStyle = defaultStyle, bgScene = "OCEAN", accentColor = "#22D3EE"),
-                SlideData("story", "Sochne ka waqt khatam!", "Iska jawab chhipa hai hamari rozmarra ki zindagi mein. Kya aap guess kar paye?", voiceText = "Iska jawab chhipa hai hamari rozmarra ki zindagi mein.", voiceStyle = defaultStyle, bgScene = "CYBER_GRID", accentColor = "#38BDF8"),
-                SlideData("listicle", "Hints jo aapko madad karenge:", "1. Yeh namak se judi hai\n2. Pani mein ghul jati hai", voiceText = "Yeh namak se judi hai aur pani mein ghul jati hai.", voiceStyle = defaultStyle, bgScene = "AURORA_BOREALIS", accentColor = "#4ADE80"),
-                SlideData("quote", "Sahi Jawab:", "Baraf ya Namak! Kaisa laga yeh challenging puzzle?", voiceText = "Sahi jawab hai baraf ya namak!", voiceStyle = defaultStyle, bgScene = "GOLDEN_SAND", accentColor = "#FACC15"),
-                SlideData("story", "Dimaag ki kasrat jari rakhein", "Aise hi mazedar aur dimaghi riddles ke liye hamare sath jude rahein.", voiceText = "Aise hi mazedar riddles ke liye jude rahein.", voiceStyle = defaultStyle, bgScene = "MYSTIC_PURPLE", accentColor = "#C084FC"),
-                SlideData("quote", "Part 2 ke liye follow karein!", "ReelCraft Brain Teasers", voiceText = "Part 2 ke liye follow karein.", voiceStyle = defaultStyle, bgScene = "NIGHT_SKY", accentColor = "#F43F5E")
+                SlideData("riddle", "99% log yeh riddle solve nahi kar paate!", "Aisi kaun si cheez hai jo samandar mein paida hoti hai aur ghar mein aate hi mar jati hai? Sochiye!", voiceText = "Aisi kaun si cheez hai jo samandar mein paida hoti hai?", voiceStyle = defaultStyle, accentColor = "#22D3EE"),
+                SlideData("story", "Sochne ka waqt khatam!", "Iska jawab chhipa hai hamari rozmarra ki zindagi mein. Kya aap guess kar paye?", voiceText = "Iska jawab chhipa hai hamari rozmarra ki zindagi mein.", voiceStyle = defaultStyle, accentColor = "#38BDF8"),
+                SlideData("listicle", "Hints jo aapko madad karenge:", "1. Yeh namak se judi hai\n2. Pani mein ghul jati hai", voiceText = "Yeh namak se judi hai aur pani mein ghul jati hai.", voiceStyle = defaultStyle, accentColor = "#4ADE80"),
+                SlideData("quote", "Sahi Jawab:", "Baraf ya Namak! Kaisa laga yeh challenging puzzle?", voiceText = "Sahi jawab hai baraf ya namak!", voiceStyle = defaultStyle, accentColor = "#FACC15"),
+                SlideData("story", "Dimaag ki kasrat jari rakhein", "Aise hi mazedar aur dimaghi riddles ke liye hamare sath jude rahein.", voiceText = "Aise hi mazedar riddles ke liye jude rahein.", voiceStyle = defaultStyle, accentColor = "#C084FC"),
+                SlideData("quote", "Part 2 ke liye follow karein!", "ReelCraft Brain Teasers", voiceText = "Part 2 ke liye follow karein.", voiceStyle = defaultStyle, accentColor = "#F43F5E")
             )
             "facts" -> listOf(
-                SlideData("listicle", "Hairan kun Haqeeqat about $cleanTopic", "Kya aap jante hain ke duniya mein kuch aisi baatein hain jo science ko bhi hairan kar deti hain?", voiceText = "Kya aap jante hain yeh hairan kun haqeeqat?", voiceStyle = defaultStyle, bgScene = "NIGHT_SKY", accentColor = "#FACC15"),
-                SlideData("story", "Pehla Raaz", "Scientific research ke mutabiq yeh phenomenon sadiyon se chala aa raha hai.", voiceText = "Yeh phenomenon sadiyon se chala aa raha hai.", voiceStyle = defaultStyle, bgScene = "AURORA_BOREALIS", accentColor = "#38BDF8"),
-                SlideData("listicle", "Key Discovery Points:", "1. Unexpected origin\n2. Hidden scientific value", voiceText = "Inke peeche chhupe hain bade raaz.", voiceStyle = defaultStyle, bgScene = "CYBER_GRID", accentColor = "#22D3EE"),
-                SlideData("story", "Gheri Haqeeqat", "Jab scientists ne iski gehrai mein jaakar dekha, to pata chala.", voiceText = "Scientists ne iski gehrai mein jaakar dekha.", voiceStyle = defaultStyle, bgScene = "MYSTIC_PURPLE", accentColor = "#E879F9"),
-                SlideData("quote", "Knowledge is Power", "Aisi hi informative aur deep facts ke liye rozana hamari videos dekhein.", voiceText = "Aisi hi informative facts ke liye videos dekhein.", voiceStyle = defaultStyle, bgScene = "GOLDEN_SAND", accentColor = "#FBBF24"),
-                SlideData("quote", "Share with your friends!", "ReelCraft Knowledge", voiceText = " apne doston ke sath share karein.", voiceStyle = defaultStyle, bgScene = "OCEAN", accentColor = "#34D399")
+                SlideData("listicle", "Hairan kun Haqeeqat about $cleanTopic", "Kya aap jante hain ke duniya mein kuch aisi baatein hain jo science ko bhi hairan kar deti hain?", voiceText = "Kya aap jante hain yeh hairan kun haqeeqat?", voiceStyle = defaultStyle, accentColor = "#FACC15"),
+                SlideData("story", "Pehla Raaz", "Scientific research ke mutabiq yeh phenomenon sadiyon se chala aa raha hai.", voiceText = "Yeh phenomenon sadiyon se chala aa raha hai.", voiceStyle = defaultStyle, accentColor = "#38BDF8"),
+                SlideData("listicle", "Key Discovery Points:", "1. Unexpected origin\n2. Hidden scientific value", voiceText = "Inke peeche chhupe hain bade raaz.", voiceStyle = defaultStyle, accentColor = "#22D3EE"),
+                SlideData("story", "Gheri Haqeeqat", "Jab scientists ne iski gehrai mein jaakar dekha, to pata chala.", voiceText = "Scientists ne iski gehrai mein jaakar dekha.", voiceStyle = defaultStyle, accentColor = "#E879F9"),
+                SlideData("quote", "Knowledge is Power", "Aisi hi informative aur deep facts ke liye rozana hamari videos dekhein.", voiceText = "Aisi hi informative facts ke liye videos dekhein.", voiceStyle = defaultStyle, accentColor = "#FBBF24"),
+                SlideData("quote", "Share with your friends!", "ReelCraft Knowledge", voiceText = " apne doston ke sath share karein.", voiceStyle = defaultStyle, accentColor = "#34D399")
             )
             "motivation" -> listOf(
-                SlideData("quote", "Aapki zindagi tab badalti hai jab aap bahane banana chhor dete hain.", "Topic: $cleanTopic", voiceText = "Zindagi tab badalti hai jab bahane chhor dete hain.", voiceStyle = defaultStyle, bgScene = "FIRE_EMBERS", accentColor = "#FF4D8D"),
-                SlideData("story", "Asli Safar", "Kamyabi raaton raat nahi milti. Iske peeche saalon ki khamosh mehnat hoti hai.", voiceText = "Kamyabi raaton raat nahi milti.", voiceStyle = defaultStyle, bgScene = "GOLDEN_SAND", accentColor = "#F59E0B"),
-                SlideData("listicle", "3 Golden Rules of Success:", "1. Consistency\n2. Resilience\n3. Focus", voiceText = "Success ke teen golden rules yaad rakhein.", voiceStyle = defaultStyle, bgScene = "CYBER_GRID", accentColor = "#38BDF8"),
-                SlideData("story", "Khud par yaqeen rakhein", "Jab puri duniya aap par shak kare, tab aapka khud par bharosa bada hathiyar banta hai.", voiceText = "Khud par bharosa sabse bada hathiyar hai.", voiceStyle = defaultStyle, bgScene = "MYSTIC_PURPLE", accentColor = "#A78BFA"),
-                SlideData("quote", "Aap jo chahte hain wo pa sakte hain.", "Bas haar mat maaniye!", voiceText = "Bas haar mat maaniye!", voiceStyle = defaultStyle, bgScene = "AURORA_BOREALIS", accentColor = "#34D399"),
-                SlideData("quote", "Stay Unstoppable!", "ReelCraft Motivation", voiceText = "Stay unstoppable with ReelCraft.", voiceStyle = defaultStyle, bgScene = "NIGHT_SKY", accentColor = "#F43F5E")
+                SlideData("quote", "Aapki zindagi tab badalti hai jab aap bahane banana chhor dete hain.", "Topic: $cleanTopic", voiceText = "Zindagi tab badalti hai jab bahane chhor dete hain.", voiceStyle = defaultStyle, accentColor = "#FF4D8D"),
+                SlideData("story", "Asli Safar", "Kamyabi raaton raat nahi milti. Iske peeche saalon ki khamosh mehnat hoti hai.", voiceText = "Kamyabi raaton raat nahi milti.", voiceStyle = defaultStyle, accentColor = "#F59E0B"),
+                SlideData("listicle", "3 Golden Rules of Success:", "1. Consistency\n2. Resilience\n3. Focus", voiceText = "Success ke teen golden rules yaad rakhein.", voiceStyle = defaultStyle, accentColor = "#38BDF8"),
+                SlideData("story", "Khud par yaqeen rakhein", "Jab puri duniya aap par shak kare, tab aapka khud par bharosa bada hathiyar banta hai.", voiceText = "Khud par bharosa sabse bada hathiyar hai.", voiceStyle = defaultStyle, accentColor = "#A78BFA"),
+                SlideData("quote", "Aap jo chahte hain wo pa sakte hain.", "Bas haar mat maaniye!", voiceText = "Bas haar mat maaniye!", voiceStyle = defaultStyle, accentColor = "#34D399"),
+                SlideData("quote", "Stay Unstoppable!", "ReelCraft Motivation", voiceText = "Stay unstoppable with ReelCraft.", voiceStyle = defaultStyle, accentColor = "#F43F5E")
             )
             else -> listOf(
-                SlideData("story", "Kahani $cleanTopic ki", "Ek aisi gehari aur dilchasp dastan jo aapko shuru se aakhir tak baandh kar rakhegi.", voiceText = "Ek aisi dilchasp dastan.", voiceStyle = defaultStyle, bgScene = "OCEAN", accentColor = "#7C4DFF"),
-                SlideData("story", "Mod aur Haqeeqat", "Har kahani ka aik pehlu hota hai jo samne aata hai.", voiceText = "Har kahani ka aik pehlu hota hai.", voiceStyle = defaultStyle, bgScene = "MYSTIC_PURPLE", accentColor = "#C084FC"),
-                SlideData("listicle", "Yeh Khel kahan tak gaya?", "1. Shuruaat\n2. Mod\n3. Anjaam", voiceText = "Yeh safar kahan tak gaya?", voiceStyle = defaultStyle, bgScene = "AURORA_BOREALIS", accentColor = "#38BDF8"),
-                SlideData("story", "Sabaq", "Is safar se humein yehi sabaq milta hai ke waqt sab kuch badal deta hai.", voiceText = "Waqt sab kuch badal deta hai.", voiceStyle = defaultStyle, bgScene = "GOLDEN_SAND", accentColor = "#FACC15"),
-                SlideData("quote", "Aisi hi aur kahaniyan sunne ke liye", "Jude rahiye hamare sath.", voiceText = "Aisi hi aur kahaniyan sunne ke liye jude rahein.", voiceStyle = defaultStyle, bgScene = "FIRE_EMBERS", accentColor = "#FB923C"),
-                SlideData("quote", "Part 2 Coming Soon", "ReelCraft Stories", voiceText = "Part 2 coming soon.", voiceStyle = defaultStyle, bgScene = "CYBER_GRID", accentColor = "#22D3EE")
+                SlideData("story", "Kahani $cleanTopic ki", "Ek aisi gehari aur dilchasp dastan jo aapko shuru se aakhir tak baandh kar rakhegi.", voiceText = "Ek aisi dilchasp dastan.", voiceStyle = defaultStyle, accentColor = "#7C4DFF"),
+                SlideData("story", "Mod aur Haqeeqat", "Har kahani ka aik pehlu hota hai jo samne aata hai.", voiceText = "Har kahani ka aik pehlu hota hai.", voiceStyle = defaultStyle, accentColor = "#C084FC"),
+                SlideData("listicle", "Yeh Khel kahan tak gaya?", "1. Shuruaat\n2. Mod\n3. Anjaam", voiceText = "Yeh safar kahan tak gaya?", voiceStyle = defaultStyle, accentColor = "#38BDF8"),
+                SlideData("story", "Sabaq", "Is safar se humein yehi sabaq milta hai ke waqt sab kuch badal deta hai.", voiceText = "Waqt sab kuch badal deta hai.", voiceStyle = defaultStyle, accentColor = "#FACC15"),
+                SlideData("quote", "Aisi hi aur kahaniyan sunne ke liye", "Jude rahiye hamare sath.", voiceText = "Aisi hi aur kahaniyan sunne ke liye jude rahein.", voiceStyle = defaultStyle, accentColor = "#FB923C"),
+                SlideData("quote", "Part 2 Coming Soon", "ReelCraft Stories", voiceText = "Part 2 coming soon.", voiceStyle = defaultStyle, accentColor = "#22D3EE")
+            )
+        }
+
+        return rawSlides.mapIndexed { index, slide ->
+            val uniqueScene = SceneGenerator.pickUniquePreset(recentPresets, projectSeed + index)
+            securePrefs.addRecentPresetId(uniqueScene)
+            slide.copy(
+                bgScene = uniqueScene,
+                seed = projectSeed + index
             )
         }
     }

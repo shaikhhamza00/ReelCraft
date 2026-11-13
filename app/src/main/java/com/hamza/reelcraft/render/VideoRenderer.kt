@@ -64,7 +64,7 @@ class VideoRenderer(private val context: Context) {
         canvas.scale(currentScale, currentScale, WIDTH / 2f, HEIGHT / 2f)
 
         // 1. Draw Context-Aware Background Scene
-        drawBackgroundScene(canvas, slide.bgScene, animProgress, theme)
+        drawBackgroundScene(canvas, slide.bgScene, animProgress, slide.seed)
 
         // Colors
         val textColor = try { AndroidColor.parseColor(theme.textColorHex) } catch (e: Exception) { AndroidColor.WHITE }
@@ -106,8 +106,8 @@ class VideoRenderer(private val context: Context) {
         return bitmap
     }
 
-    private fun drawBackgroundScene(canvas: Canvas, scene: String, progress: Float, theme: Theme) {
-        val spec = SceneGenerator.getSpec(scene)
+    private fun drawBackgroundScene(canvas: Canvas, scene: String, progress: Float, seed: Long) {
+        val spec = SceneGenerator.getSpec(scene, seed)
         SceneRenderer.render(canvas, spec, progress * 3.0f)
     }
 

@@ -36,4 +36,19 @@ class SecurePreferences(context: Context) {
     fun getActiveApiKey(): String {
         return sharedPreferences.getString("active_api_key", "") ?: ""
     }
+
+    fun getRecentPresetIds(): List<String> {
+        val str = sharedPreferences.getString("recent_preset_ids", "") ?: ""
+        return if (str.isBlank()) emptyList() else str.split(",").filter { it.isNotBlank() }
+    }
+
+    fun addRecentPresetId(id: String) {
+        val list = getRecentPresetIds().toMutableList()
+        list.remove(id)
+        list.add(0, id)
+        if (list.size > 3) {
+            list.removeAt(list.size - 1)
+        }
+        sharedPreferences.edit().putString("recent_preset_ids", list.joinToString(",")).apply()
+    }
 }
