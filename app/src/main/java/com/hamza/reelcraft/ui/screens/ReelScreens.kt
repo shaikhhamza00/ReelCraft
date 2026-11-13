@@ -50,7 +50,8 @@ import com.hamza.reelcraft.ui.theme.*
 fun HomeScreen(
     viewModel: ReelViewModel,
     onNavigateCreate: () -> Unit,
-    onNavigateSettings: () -> Unit
+    onNavigateSettings: () -> Unit,
+    onNavigateThemeTest: () -> Unit
 ) {
     val gradientBrush = Brush.horizontalGradient(ReelGradientPrimary)
 
@@ -116,7 +117,20 @@ fun HomeScreen(
             style = MaterialTheme.typography.bodyMedium,
             color = ReelTextSecondary
         )
-        Spacer(modifier = Modifier.height(20.dp))
+        Spacer(modifier = Modifier.height(12.dp))
+
+        Button(
+            onClick = onNavigateThemeTest,
+            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1E293B)),
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(44.dp),
+            shape = RoundedCornerShape(12.dp)
+        ) {
+            Text("🧪 Test Theme Grid (12 Topics x 2 Seeds)", color = Color.Cyan, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+        }
+
+        Spacer(modifier = Modifier.height(16.dp))
 
         // Recent Projects Placeholder Section
         SectionHeader(title = "Recent Projects")

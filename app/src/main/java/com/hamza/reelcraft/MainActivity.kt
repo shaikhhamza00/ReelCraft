@@ -21,6 +21,7 @@ import com.hamza.reelcraft.ui.screens.HomeScreen
 import com.hamza.reelcraft.ui.screens.MultiStyleGalleryScreen
 import com.hamza.reelcraft.ui.screens.PreviewScreen
 import com.hamza.reelcraft.ui.screens.SettingsScreen
+import com.hamza.reelcraft.ui.screens.ThemeTestScreen
 import com.hamza.reelcraft.ui.theme.ReelCraftTheme
 
 class MainActivity : ComponentActivity() {
@@ -66,7 +67,13 @@ class MainActivity : ComponentActivity() {
                             HomeScreen(
                                 viewModel = viewModel,
                                 onNavigateCreate = { navController.navigate("create") },
-                                onNavigateSettings = { navController.navigate("settings") }
+                                onNavigateSettings = { navController.navigate("settings") },
+                                onNavigateThemeTest = { navController.navigate("theme_test") }
+                            )
+                        }
+                        composable("theme_test") {
+                            ThemeTestScreen(
+                                onBack = { navController.popBackStack() }
                             )
                         }
                         composable("settings") {
