@@ -4,8 +4,10 @@ import android.content.ContentValues
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.Canvas
+import android.graphics.LinearGradient
 import android.graphics.Paint
 import android.graphics.RectF
+import android.graphics.Shader
 import android.graphics.Typeface
 import android.graphics.Color as AndroidColor
 import android.media.MediaCodec
@@ -30,89 +32,79 @@ class VideoRenderer(private val context: Context) {
         private const val WIDTH = 720
         private const val HEIGHT = 1280
         private const val FPS = 30
-        private const val BIT_RATE = 2_000_000 // 2 Mbps
+        private const val BIT_RATE = 3_000_000 // 3 Mbps for crisp quality
     }
 
     /**
-     * Stage 2: Draw a template-based slide onto a 720x1280 Bitmap with Theme and Safe Zones
+     * Draw a fancy, professional, modern template-based slide onto a 720x1280 Bitmap.
      */
     fun drawSlideBitmap(slide: SlideData, theme: Theme, slideIndex: Int, totalSlides: Int): Bitmap {
         val bitmap = Bitmap.createBitmap(WIDTH, HEIGHT, Bitmap.Config.ARGB_8888)
         val canvas = Canvas(bitmap)
 
-        // Background color from theme
-        val bgColor = try {
-            AndroidColor.parseColor(theme.backgroundColorHex)
-        } catch (e: Exception) {
-            AndroidColor.parseColor("#1A1A2E")
-        }
-        canvas.drawColor(bgColor)
+        // 1. Draw Professional Gradient Background
+        val baseColor = try { AndroidColor.parseColor(theme.backgroundColorHex) } catch (e: Exception) { AndroidColor.parseColor("#0F172A") }
+        val darkBase = adjustColorBrightness(baseColor, 0.6f)
+        val gradient = LinearGradient(
+            0f, 0f, 0f, HEIGHT.toFloat(),
+            intArrayOf(darkBase, baseColor, AndroidColor.BLACK),
+            floatArrayOf(0f, 0.5f, 1f),
+            Shader.TileMode.CLAMP
+        )
+        val bgPaint = Paint().apply { shader = gradient }
+        canvas.drawRect(0f, 0f, WIDTH.toFloat(), HEIGHT.toFloat(), bgPaint)
 
-        val textColor = try {
-            AndroidColor.parseColor(theme.textColorHex)
-        } catch (e: Exception) {
-            AndroidColor.WHITE
-        }
+        // Colors
+        val textColor = try { AndroidColor.parseColor(theme.textColorHex) } catch (e: Exception) { AndroidColor.WHITE }
+        val accentColor = try { AndroidColor.parseColor(theme.accentColorHex) } catch (e: Exception) { AndroidColor.parseColor("#00FFCC") }
 
-        val accentColor = try {
-            AndroidColor.parseColor(theme.accentColorHex)
-        } catch (e: Exception) {
-            AndroidColor.YELLOW
-        }
-
-        // Safe zone margins (15% top/bottom, 10% left/right)
-        val marginX = (WIDTH * 0.1f).toInt()
+        val marginX = 54
         val contentWidth = WIDTH - (2 * marginX)
-        val topBound = HEIGHT * 0.15f
-        val bottomBound = HEIGHT * 0.85f
+        val topBound = 180f
 
-        // Draw top progress bar for video retention
+        // 2. Modern Top Retention Progress Bar & Hook Badge
         val progressPaint = Paint().apply {
             color = accentColor
-            strokeWidth = 6f
+            strokeWidth = 8f
             style = Paint.Style.FILL
+            setShadowLayer(10f, 0f, 0f, accentColor)
         }
         val progressWidth = (WIDTH.toFloat() / totalSlides) * (slideIndex + 1)
-        canvas.drawRect(0f, 0f, progressWidth, 12f, progressPaint)
+        canvas.drawRoundRect(40f, 40f, progressWidth.coerceAtLeast(40f), 52f, 6f, 6f, progressPaint)
 
-        // Draw Template specific UI
+        // 3. Draw Template specific Fancy UI
         when (slide.templateType.lowercase()) {
-            "riddle" -> drawRiddleTemplate(canvas, slide, contentWidth, marginX, topBound, textColor, accentColor)
-            "quote" -> drawQuoteTemplate(canvas, slide, contentWidth, marginX, topBound, textColor, accentColor)
-            "listicle" -> drawListicleTemplate(canvas, slide, contentWidth, marginX, topBound, textColor, accentColor, slideIndex + 1, totalSlides)
-            else -> drawStoryTemplate(canvas, slide, contentWidth, marginX, topBound, textColor, accentColor)
+            "riddle" -> drawFancyRiddleTemplate(canvas, slide, contentWidth, marginX, topBound, textColor, accentColor)
+            "quote" -> drawFancyQuoteTemplate(canvas, slide, contentWidth, marginX, topBound, textColor, accentColor)
+            "listicle" -> drawFancyListicleTemplate(canvas, slide, contentWidth, marginX, topBound, textColor, accentColor, slideIndex + 1, totalSlides)
+            else -> drawFancyStoryTemplate(canvas, slide, contentWidth, marginX, topBound, textColor, accentColor)
         }
 
-        // Draw Footer Watermark / Branding
+        // 4. Fancy Footer Branding
         val footerPaint = Paint().apply {
             color = textColor
-            alpha = 150
-            textSize = 24f
+            alpha = 180
+            textSize = 26f
             textAlign = Paint.Align.CENTER
             isAntiAlias = true
+            setShadowLayer(6f, 0f, 2f, AndroidColor.BLACK)
         }
-        canvas.drawText("Made with ReelCraft", WIDTH / 2f, bottomBound + 40f, footerPaint)
+        canvas.drawText("✨ Made with ReelCraft", WIDTH / 2f, HEIGHT - 80f, footerPaint)
 
         return bitmap
     }
 
-    private fun drawStoryTemplate(canvas: Canvas, slide: SlideData, contentWidth: Int, marginX: Int, topBound: Float, textColor: Int, accentColor: Int) {
-        // Accent badge
-        val badgePaint = Paint().apply {
-            color = accentColor
-            textSize = 28f
-            isAntiAlias = true
-            textAlign = Paint.Align.CENTER
-            typeface = Typeface.DEFAULT_BOLD
-        }
-        canvas.drawText("FEATURED STORY", WIDTH / 2f, topBound + 40f, badgePaint)
+    private fun drawFancyStoryTemplate(canvas: Canvas, slide: SlideData, contentWidth: Int, marginX: Int, topBound: Float, textColor: Int, accentColor: Int) {
+        // Category Badge
+        drawBadge(canvas, "🔥 VIRAL STORY", marginX.toFloat(), topBound, accentColor)
 
-        // Headline
+        // Headline with drop shadow
         val titlePaint = TextPaint().apply {
             color = textColor
-            textSize = 52f
+            textSize = 58f
             isAntiAlias = true
-            typeface = Typeface.DEFAULT_BOLD
+            typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+            setShadowLayer(12f, 0f, 4f, AndroidColor.BLACK)
         }
         val titleLayout = StaticLayout.Builder.obtain(slide.headline, 0, slide.headline.length, titlePaint, contentWidth)
             .setAlignment(Layout.Alignment.ALIGN_CENTER)
@@ -123,134 +115,211 @@ class VideoRenderer(private val context: Context) {
         titleLayout.draw(canvas)
         canvas.restore()
 
-        // Body
-        val bodyPaint = TextPaint().apply {
-            color = textColor
-            textSize = 38f
+        // Translucent Glassmorphism Card for Body
+        val cardTop = topBound + 380f
+        val cardBottom = cardTop + 450f
+        val cardPaint = Paint().apply {
+            color = AndroidColor.parseColor("#22000000")
+            style = Paint.Style.FILL
             isAntiAlias = true
         }
-        val bodyLayout = StaticLayout.Builder.obtain(slide.body, 0, slide.body.length, bodyPaint, contentWidth)
+        val cardRect = RectF(marginX.toFloat() - 20f, cardTop, (WIDTH - marginX + 20).toFloat(), cardBottom)
+        canvas.drawRoundRect(cardRect, 24f, 24f, cardPaint)
+
+        // Card Border Glow
+        val borderPaint = Paint().apply {
+            color = accentColor
+            style = Paint.Style.STROKE
+            strokeWidth = 3f
+            alpha = 120
+            isAntiAlias = true
+        }
+        canvas.drawRoundRect(cardRect, 24f, 24f, borderPaint)
+
+        // Body Text inside card
+        val bodyPaint = TextPaint().apply {
+            color = textColor
+            textSize = 42f
+            isAntiAlias = true
+            setShadowLayer(8f, 0f, 2f, AndroidColor.BLACK)
+        }
+        val bodyLayout = StaticLayout.Builder.obtain(slide.body, 0, slide.body.length, bodyPaint, contentWidth - 40)
             .setAlignment(Layout.Alignment.ALIGN_CENTER)
             .build()
 
         canvas.save()
-        canvas.translate(marginX.toFloat(), topBound + 350f)
+        canvas.translate(marginX.toFloat() + 20f, cardTop + 60f)
         bodyLayout.draw(canvas)
         canvas.restore()
     }
 
-    private fun drawRiddleTemplate(canvas: Canvas, slide: SlideData, contentWidth: Int, marginX: Int, topBound: Float, textColor: Int, accentColor: Int) {
-        val badgePaint = Paint().apply {
-            color = accentColor
-            textSize = 32f
-            isAntiAlias = true
-            textAlign = Paint.Align.CENTER
-            typeface = Typeface.DEFAULT_BOLD
-        }
-        canvas.drawText("🧠 RIDDLE CHALLENGE", WIDTH / 2f, topBound + 40f, badgePaint)
+    private fun drawFancyRiddleTemplate(canvas: Canvas, slide: SlideData, contentWidth: Int, marginX: Int, topBound: Float, textColor: Int, accentColor: Int) {
+        drawBadge(canvas, "🧠 BRAIN TEASER / RIDDLE", marginX.toFloat(), topBound, accentColor)
 
         val titlePaint = TextPaint().apply {
             color = textColor
-            textSize = 48f
+            textSize = 54f
             isAntiAlias = true
-            typeface = Typeface.DEFAULT_BOLD
+            typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+            setShadowLayer(12f, 0f, 4f, AndroidColor.BLACK)
         }
         val titleLayout = StaticLayout.Builder.obtain(slide.headline, 0, slide.headline.length, titlePaint, contentWidth)
             .setAlignment(Layout.Alignment.ALIGN_CENTER)
             .build()
 
         canvas.save()
-        canvas.translate(marginX.toFloat(), topBound + 150f)
+        canvas.translate(marginX.toFloat(), topBound + 120f)
         titleLayout.draw(canvas)
         canvas.restore()
 
-        // Countdown timer box
+        // Fancy Answer Box
+        val boxTop = topBound + 420f
         val boxPaint = Paint().apply {
+            color = AndroidColor.parseColor("#331E1E2E")
+            style = Paint.Style.FILL
+            isAntiAlias = true
+        }
+        val boxRect = RectF(marginX.toFloat(), boxTop, (WIDTH - marginX).toFloat(), boxTop + 220f)
+        canvas.drawRoundRect(boxRect, 28f, 28f, boxPaint)
+
+        val boxBorder = Paint().apply {
             color = accentColor
             style = Paint.Style.STROKE
             strokeWidth = 4f
-        }
-        val rect = RectF(marginX.toFloat(), topBound + 480f, (WIDTH - marginX).toFloat(), topBound + 600f)
-        canvas.drawRoundRect(rect, 16f, 16f, boxPaint)
-
-        val bodyPaint = Paint().apply {
-            color = textColor
-            textSize = 36f
-            textAlign = Paint.Align.CENTER
             isAntiAlias = true
         }
-        canvas.drawText(slide.body, WIDTH / 2f, topBound + 550f, bodyPaint)
+        canvas.drawRoundRect(boxRect, 28f, 28f, boxBorder)
+
+        val bodyPaint = TextPaint().apply {
+            color = textColor
+            textSize = 40f
+            isAntiAlias = true
+            setShadowLayer(8f, 0f, 2f, AndroidColor.BLACK)
+        }
+        val bodyLayout = StaticLayout.Builder.obtain(slide.body, 0, slide.body.length, bodyPaint, contentWidth - 60)
+            .setAlignment(Layout.Alignment.ALIGN_CENTER)
+            .build()
+
+        canvas.save()
+        canvas.translate(marginX.toFloat() + 30f, boxTop + 50f)
+        bodyLayout.draw(canvas)
+        canvas.restore()
     }
 
-    private fun drawQuoteTemplate(canvas: Canvas, slide: SlideData, contentWidth: Int, marginX: Int, topBound: Float, textColor: Int, accentColor: Int) {
+    private fun drawFancyQuoteTemplate(canvas: Canvas, slide: SlideData, contentWidth: Int, marginX: Int, topBound: Float, textColor: Int, accentColor: Int) {
+        drawBadge(canvas, "💡 INSPIRATION", marginX.toFloat(), topBound, accentColor)
+
+        // Large Decorative Quote Marks
+        val qPaint = Paint().apply {
+            color = accentColor
+            textSize = 120f
+            alpha = 100
+            isAntiAlias = true
+            typeface = Typeface.DEFAULT_BOLD
+        }
+        canvas.drawText("“", marginX.toFloat(), topBound + 220f, qPaint)
+
         val quotePaint = TextPaint().apply {
             color = textColor
             textSize = 56f
             isAntiAlias = true
             typeface = Typeface.create(Typeface.DEFAULT, Typeface.ITALIC)
+            setShadowLayer(12f, 0f, 4f, AndroidColor.BLACK)
         }
-        val quoteLayout = StaticLayout.Builder.obtain("“${slide.headline}”", 0, slide.headline.length + 2, quotePaint, contentWidth)
+        val quoteLayout = StaticLayout.Builder.obtain(slide.headline, 0, slide.headline.length, quotePaint, contentWidth - 40)
             .setAlignment(Layout.Alignment.ALIGN_CENTER)
             .build()
 
         canvas.save()
-        canvas.translate(marginX.toFloat(), topBound + 200f)
+        canvas.translate((marginX + 20).toFloat(), topBound + 220f)
         quoteLayout.draw(canvas)
         canvas.restore()
 
+        // Author / Footer
         val authorPaint = Paint().apply {
             color = accentColor
-            textSize = 36f
+            textSize = 38f
             textAlign = Paint.Align.CENTER
             isAntiAlias = true
-            typeface = Typeface.DEFAULT_BOLD
+            typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+            setShadowLayer(8f, 0f, 2f, AndroidColor.BLACK)
         }
-        canvas.drawText("- ${slide.body}", WIDTH / 2f, topBound + 600f, authorPaint)
+        canvas.drawText("— ${slide.body}", WIDTH / 2f, topBound + 650f, authorPaint)
     }
 
-    private fun drawListicleTemplate(canvas: Canvas, slide: SlideData, contentWidth: Int, marginX: Int, topBound: Float, textColor: Int, accentColor: Int, index: Int, total: Int) {
-        val badgePaint = Paint().apply {
-            color = accentColor
-            textSize = 36f
-            isAntiAlias = true
-            textAlign = Paint.Align.CENTER
-            typeface = Typeface.DEFAULT_BOLD
-        }
-        canvas.drawText("POINT $index OF $total", WIDTH / 2f, topBound + 40f, badgePaint)
+    private fun drawFancyListicleTemplate(canvas: Canvas, slide: SlideData, contentWidth: Int, marginX: Int, topBound: Float, textColor: Int, accentColor: Int, index: Int, total: Int) {
+        drawBadge(canvas, "📌 POINT $index OF $total", marginX.toFloat(), topBound, accentColor)
 
         val titlePaint = TextPaint().apply {
             color = textColor
             textSize = 52f
             isAntiAlias = true
-            typeface = Typeface.DEFAULT_BOLD
+            typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+            setShadowLayer(12f, 0f, 4f, AndroidColor.BLACK)
         }
         val titleLayout = StaticLayout.Builder.obtain(slide.headline, 0, slide.headline.length, titlePaint, contentWidth)
             .setAlignment(Layout.Alignment.ALIGN_CENTER)
             .build()
 
         canvas.save()
-        canvas.translate(marginX.toFloat(), topBound + 150f)
+        canvas.translate(marginX.toFloat(), topBound + 120f)
         titleLayout.draw(canvas)
         canvas.restore()
 
-        val bodyPaint = TextPaint().apply {
-            color = textColor
-            textSize = 38f
+        // Content Card
+        val cardTop = topBound + 360f
+        val cardPaint = Paint().apply {
+            color = AndroidColor.parseColor("#25000000")
+            style = Paint.Style.FILL
             isAntiAlias = true
         }
-        val bodyLayout = StaticLayout.Builder.obtain(slide.body, 0, slide.body.length, bodyPaint, contentWidth)
+        val cardRect = RectF(marginX.toFloat(), cardTop, (WIDTH - marginX).toFloat(), cardTop + 420f)
+        canvas.drawRoundRect(cardRect, 24f, 24f, cardPaint)
+
+        val bodyPaint = TextPaint().apply {
+            color = textColor
+            textSize = 40f
+            isAntiAlias = true
+            setShadowLayer(8f, 0f, 2f, AndroidColor.BLACK)
+        }
+        val bodyLayout = StaticLayout.Builder.obtain(slide.body, 0, slide.body.length, bodyPaint, contentWidth - 40)
             .setAlignment(Layout.Alignment.ALIGN_CENTER)
             .build()
 
         canvas.save()
-        canvas.translate(marginX.toFloat(), topBound + 350f)
+        canvas.translate(marginX.toFloat() + 20f, cardTop + 50f)
         bodyLayout.draw(canvas)
         canvas.restore()
     }
 
-    /**
-     * Encode list of SlideData with Theme into an MP4 file using MediaCodec + Surface + MediaMuxer
-     */
+    private fun drawBadge(canvas: Canvas, text: String, left: Float, top: Float, accentColor: Int) {
+        val badgePaint = Paint().apply {
+            color = accentColor
+            style = Paint.Style.FILL
+            isAntiAlias = true
+        }
+        val textPaint = Paint().apply {
+            color = AndroidColor.BLACK
+            textSize = 28f
+            isAntiAlias = true
+            typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+            textAlign = Paint.Align.CENTER
+        }
+        val textWidth = textPaint.measureText(text)
+        val badgeRect = RectF(left, top, left + textWidth + 48f, top + 52f)
+        canvas.drawRoundRect(badgeRect, 26f, 26f, badgePaint)
+
+        canvas.drawText(text, left + (textWidth + 48f) / 2f, top + 36f, textPaint)
+    }
+
+    private fun adjustColorBrightness(color: Int, factor: Float): Int {
+        val a = AndroidColor.alpha(color)
+        val r = (AndroidColor.red(color) * factor).toInt().coerceIn(0, 255)
+        val g = (AndroidColor.green(color) * factor).toInt().coerceIn(0, 255)
+        val b = (AndroidColor.blue(color) * factor).toInt().coerceIn(0, 255)
+        return AndroidColor.argb(a, r, g, b)
+    }
+
     fun renderProjectToMp4(slides: List<SlideData>, theme: Theme, outputFileName: String = "reel_${System.currentTimeMillis()}.mp4"): File? {
         if (slides.isEmpty()) return null
 
@@ -281,7 +350,7 @@ class VideoRenderer(private val context: Context) {
             val bufferInfo = MediaCodec.BufferInfo()
             var presentationTimeUs: Long = 0
             val frameIntervalUs = 1_000_000L / FPS
-            val slideDurationMs = 3000L // 3 seconds per slide
+            val slideDurationMs = 3000L
 
             fun drainEncoder(endOfStream: Boolean) {
                 if (endOfStream) {
@@ -332,7 +401,6 @@ class VideoRenderer(private val context: Context) {
                 }
             }
 
-            // Draw and feed frames for each slide
             for ((index, slide) in slides.withIndex()) {
                 val slideBitmap = drawSlideBitmap(slide, theme, index, slides.size)
                 val totalFrames = (slideDurationMs * FPS / 1000L).toInt()
@@ -351,13 +419,11 @@ class VideoRenderer(private val context: Context) {
             }
 
             drainEncoder(true)
-
-            // Save to MediaStore (Movies)
             saveVideoToMediaStore(outputFile)
 
             return outputFile
         } catch (e: Exception) {
-            Log.e(TAG, "Error rendering video with templates", e)
+            Log.e(TAG, "Error rendering fancy video", e)
             return null
         } finally {
             try {
@@ -374,7 +440,7 @@ class VideoRenderer(private val context: Context) {
 
     private fun saveVideoToMediaStore(videoFile: File): Boolean {
         val values = ContentValues().apply {
-            put(MediaStore.Video.Media.DISPLAY_NAME, "ReelCraft_${System.currentTimeMillis()}.mp4")
+            put(MediaStore.Video.Media.DISPLAY_NAME, "ReelCraft_Fancy_${System.currentTimeMillis()}.mp4")
             put(MediaStore.Video.Media.MIME_TYPE, "video/mp4")
             put(MediaStore.Video.Media.RELATIVE_PATH, Environment.DIRECTORY_MOVIES + "/ReelCraft")
         }
