@@ -25,6 +25,7 @@ import android.util.Log
 import com.hamza.reelcraft.model.SlideData
 import com.hamza.reelcraft.model.Theme
 import com.hamza.reelcraft.model.SceneGenerator
+import com.hamza.reelcraft.model.SceneSpec
 import java.io.File
 import java.io.FileOutputStream
 import kotlin.math.sin
@@ -50,8 +51,12 @@ class VideoRenderer(private val context: Context) {
         val bitmap = Bitmap.createBitmap(WIDTH, HEIGHT, Bitmap.Config.ARGB_8888)
         val canvas = Canvas(bitmap)
 
-        // Ken Burns Slow Zoom (1.0 to 1.08)
-        val currentScale = 1.0f + (0.08f * animProgress)
+        // Ken Burns Slow Zoom & Hook Slide Zoom Punch
+        var currentScale = 1.0f + (0.08f * animProgress)
+        if (slideIndex == 0 && animProgress < 0.3f) {
+            currentScale += (0.3f - animProgress) * 0.15f
+        }
+
         canvas.save()
 
         // Hook slide (first slide) subtle shake/glitch effect in first 0.3s (animProgress < 0.1)
@@ -63,8 +68,15 @@ class VideoRenderer(private val context: Context) {
 
         canvas.scale(currentScale, currentScale, WIDTH / 2f, HEIGHT / 2f)
 
-        // 1. Draw Context-Aware Background Scene
-        drawBackgroundScene(canvas, slide, animProgress, slideIndex, totalSlides)
+        // 1. Draw Context-Aware Background Scene and get spec
+        val spec = drawBackgroundScene(canvas, slide, animProgress, slideIndex, totalSlides)
+
+        // Hook slide brightness flash in first 0.3s
+        if (slideIndex == 0 && animProgress < 0.3f) {
+            val flashAlpha = ((0.3f - animProgress) / 0.3f * 80f).toInt().coerceIn(0, 80)
+            val flashPaint = Paint().apply { color = AndroidColor.WHITE; alpha = flashAlpha; style = Paint.Style.FILL }
+            canvas.drawRect(0f, 0f, WIDTH.toFloat(), HEIGHT.toFloat(), flashPaint)
+        }
 
         // Colors
         val textColor = try { AndroidColor.parseColor(theme.textColorHex) } catch (e: Exception) { AndroidColor.WHITE }
@@ -87,9 +99,9 @@ class VideoRenderer(private val context: Context) {
         val progressWidth = (WIDTH.toFloat() / totalSlides) * (slideIndex + animProgress)
         canvas.drawRoundRect(40f, 40f, progressWidth.coerceAtLeast(40f), 52f, 6f, 6f, progressPaint)
 
-        // 4. Kinetic Typography Word-by-Word Animation (Step 3)
+        // 4. Kinetic Typography Word-by-Word Animation with Adaptive Contrast
         val animAlpha = (animProgress * 3.0f).coerceIn(0.2f, 1.0f)
-        drawKineticText(canvas, slide, contentWidth, marginX, topBound, bottomBound, textColor, accentColor, animProgress, animAlpha)
+        drawKineticText(canvas, slide, contentWidth, marginX, topBound, bottomBound, textColor, accentColor, animProgress, animAlpha, spec)
 
         // 5. Footer Watermark
         val footerPaint = Paint().apply {
@@ -106,9 +118,10 @@ class VideoRenderer(private val context: Context) {
         return bitmap
     }
 
-    private fun drawBackgroundScene(canvas: Canvas, slide: SlideData, progress: Float, slideIndex: Int, totalSlides: Int) {
+    private fun drawBackgroundScene(canvas: Canvas, slide: SlideData, progress: Float, slideIndex: Int, totalSlides: Int): SceneSpec {
         val spec = SceneGenerator.getContextualSpec(slide.body, slide.headline, slide.bgScene, slide.seed, slideIndex, totalSlides)
         SceneRenderer.render(canvas, spec, progress * 3.0f)
+        return spec
     }
 
     private fun drawKineticText(
@@ -121,11 +134,17 @@ class VideoRenderer(private val context: Context) {
         textColor: Int,
         accentColor: Int,
         progress: Float,
-        animAlpha: Float
+        animAlpha: Float,
+        spec: SceneSpec
     ) {
-        // Dark overlay behind text for guaranteed contrast on any background
+        // Adaptive dark overlay behind text based on background palette luminance
+        val avgLuminance = spec.palette.map { c ->
+            (0.299f * AndroidColor.red(c) + 0.587f * AndroidColor.green(c) + 0.114f * AndroidColor.blue(c))
+        }.average().toFloat()
+
+        val overlayColor = if (avgLuminance > 130f) AndroidColor.parseColor("#99000000") else AndroidColor.parseColor("#55000000")
         val overlayPaint = Paint().apply {
-            color = AndroidColor.parseColor("#44000000")
+            color = overlayColor
             style = Paint.Style.FILL
             isAntiAlias = true
         }
