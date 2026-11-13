@@ -27,6 +27,7 @@ import com.hamza.reelcraft.model.Theme
 import java.io.File
 import java.io.FileOutputStream
 import kotlin.math.sin
+import kotlin.random.Random
 
 class VideoRenderer(private val context: Context) {
 
@@ -38,18 +39,17 @@ class VideoRenderer(private val context: Context) {
         private const val BIT_RATE = 3_000_000
     }
 
-    // Reusable Paint & Path objects for high performance (Rule 3)
     private val bgPaint = Paint().apply { isAntiAlias = true }
     private val starPaint = Paint().apply { color = AndroidColor.WHITE; isAntiAlias = true }
     private val wavePath = Path()
     private val wavePaint = Paint().apply { isAntiAlias = true }
     private val sparkPaint = Paint().apply { isAntiAlias = true }
     private val vignettePaint = Paint().apply { isAntiAlias = true }
-    private val cardPaint = Paint().apply { color = AndroidColor.parseColor("#25000000"); style = Paint.Style.FILL; isAntiAlias = true }
+    private val cardPaint = Paint().apply { color = AndroidColor.parseColor("#33000000"); style = Paint.Style.FILL; isAntiAlias = true }
     private val borderPaint = Paint().apply { style = Paint.Style.STROKE; strokeWidth = 3f; isAntiAlias = true }
 
     /**
-     * Draw a context-aware animated background and fancy slide onto a 720x1280 Bitmap.
+     * Draw a context-aware animated background and Kinetic Typography animated text onto a 720x1280 Bitmap.
      */
     fun drawSlideBitmap(slide: SlideData, theme: Theme, slideIndex: Int, totalSlides: Int, animProgress: Float = 0.0f): Bitmap {
         val bitmap = Bitmap.createBitmap(WIDTH, HEIGHT, Bitmap.Config.ARGB_8888)
@@ -58,12 +58,20 @@ class VideoRenderer(private val context: Context) {
         // Ken Burns Slow Zoom (1.0 to 1.08)
         val currentScale = 1.0f + (0.08f * animProgress)
         canvas.save()
+
+        // Hook slide (first slide) subtle shake/glitch effect in first 0.3s (animProgress < 0.1)
+        if (slideIndex == 0 && animProgress < 0.1f) {
+            val shakeX = (Random.nextFloat() - 0.5f) * 8f
+            val shakeY = (Random.nextFloat() - 0.5f) * 8f
+            canvas.translate(shakeX, shakeY)
+        }
+
         canvas.scale(currentScale, currentScale, WIDTH / 2f, HEIGHT / 2f)
 
-        // 1. Draw Context-Aware Background Scene (`NIGHT_SKY`, `OCEAN`, `FIRE_EMBERS`, or fallback)
+        // 1. Draw Context-Aware Background Scene
         drawBackgroundScene(canvas, slide.bgScene, animProgress, theme)
 
-        // 2. Draw Vignette & Subtle Film Grain overlay
+        // 2. Draw Vignette & Film Grain
         drawVignetteAndGrain(canvas)
 
         // Colors
@@ -74,7 +82,8 @@ class VideoRenderer(private val context: Context) {
 
         val marginX = 54
         val contentWidth = WIDTH - (2 * marginX)
-        val topBound = 180f
+        val topBound = HEIGHT * 0.15f // Safe zone: top 15% empty (Rule 6 / Step 3)
+        val bottomBound = HEIGHT * 0.85f // Safe zone: bottom 15% empty
 
         // 3. Top Retention Progress Bar
         val progressPaint = Paint().apply {
@@ -86,16 +95,9 @@ class VideoRenderer(private val context: Context) {
         val progressWidth = (WIDTH.toFloat() / totalSlides) * (slideIndex + animProgress)
         canvas.drawRoundRect(40f, 40f, progressWidth.coerceAtLeast(40f), 52f, 6f, 6f, progressPaint)
 
-        // 4. Draw Template Content with Animation Alpha
+        // 4. Kinetic Typography Word-by-Word Animation (Step 3)
         val animAlpha = (animProgress * 3.0f).coerceIn(0.2f, 1.0f)
-        val badgeTitle = getBadgeForScene(slide.bgScene, slide.templateType)
-
-        when (slide.templateType.lowercase()) {
-            "riddle" -> drawTemplateContent(canvas, slide, contentWidth, marginX, topBound, textColor, accentColor, animAlpha, badgeTitle)
-            "quote" -> drawTemplateContent(canvas, slide, contentWidth, marginX, topBound, textColor, accentColor, animAlpha, badgeTitle)
-            "listicle" -> drawTemplateContent(canvas, slide, contentWidth, marginX, topBound, textColor, accentColor, animAlpha, badgeTitle)
-            else -> drawTemplateContent(canvas, slide, contentWidth, marginX, topBound, textColor, accentColor, animAlpha, badgeTitle)
-        }
+        drawKineticText(canvas, slide, contentWidth, marginX, topBound, bottomBound, textColor, accentColor, animProgress, animAlpha)
 
         // 5. Footer Watermark
         val footerPaint = Paint().apply {
@@ -106,7 +108,7 @@ class VideoRenderer(private val context: Context) {
             isAntiAlias = true
             setShadowLayer(6f, 0f, 2f, AndroidColor.BLACK)
         }
-        canvas.drawText("✨ ReelCraft • [${theme.name}]", WIDTH / 2f, HEIGHT - 80f, footerPaint)
+        canvas.drawText("✨ ReelCraft • [${theme.name}]", WIDTH / 2f, bottomBound + 45f, footerPaint)
 
         canvas.restore()
         return bitmap
@@ -118,7 +120,6 @@ class VideoRenderer(private val context: Context) {
             "OCEAN" -> drawOceanWaves(canvas, progress)
             "FIRE_EMBERS" -> drawFireEmbers(canvas, progress)
             else -> {
-                // Fallback gradient based on theme
                 val baseColor = try { AndroidColor.parseColor(theme.backgroundColorHex) } catch (e: Exception) { AndroidColor.parseColor("#0B0B12") }
                 val grad = LinearGradient(0f, 0f, 0f, HEIGHT.toFloat(), intArrayOf(baseColor, AndroidColor.BLACK), floatArrayOf(0f, 1f), Shader.TileMode.CLAMP)
                 bgPaint.shader = grad
@@ -128,31 +129,26 @@ class VideoRenderer(private val context: Context) {
     }
 
     private fun drawNightSky(canvas: Canvas, progress: Float) {
-        // Sky gradient
         val grad = LinearGradient(0f, 0f, 0f, HEIGHT.toFloat(), intArrayOf(AndroidColor.parseColor("#090D16"), AndroidColor.parseColor("#1B2A4A"), AndroidColor.parseColor("#05070B")), floatArrayOf(0f, 0.6f, 1f), Shader.TileMode.CLAMP)
         bgPaint.shader = grad
         canvas.drawRect(0f, 0f, WIDTH.toFloat(), HEIGHT.toFloat(), bgPaint)
 
-        // Moon
         val moonPaint = Paint().apply { color = AndroidColor.parseColor("#FFFBEB"); isAntiAlias = true; setShadowLayer(30f, 0f, 0f, AndroidColor.parseColor("#FDE047")) }
         canvas.drawCircle(WIDTH - 150f, 220f, 60f, moonPaint)
 
-        // Twinkling Stars (reusing starPaint)
         val starCoords = listOf(100f to 150f, 250f to 300f, 400f to 120f, 550f to 280f, 150f to 500f, 600f to 600f, 300f to 750f, 650f to 200f)
         for ((idx, coord) in starCoords.withIndex()) {
-            val twinkle = (sin((progress * 10f) + idx) * 2f + 4f).toFloat()
+            val twinkle = (sin((progress * 10f) + idx) * 2f + 4f)
             starPaint.alpha = ((sin((progress * 8f) + idx) * 100 + 155).toInt()).coerceIn(50, 255)
             canvas.drawCircle(coord.first, coord.second, twinkle, starPaint)
         }
     }
 
     private fun drawOceanWaves(canvas: Canvas, progress: Float) {
-        // Sky gradient
         val grad = LinearGradient(0f, 0f, 0f, HEIGHT.toFloat(), intArrayOf(AndroidColor.parseColor("#0C4A6E"), AndroidColor.parseColor("#0369A1"), AndroidColor.parseColor("#082F49")), floatArrayOf(0f, 0.5f, 1f), Shader.TileMode.CLAMP)
         bgPaint.shader = grad
         canvas.drawRect(0f, 0f, WIDTH.toFloat(), HEIGHT.toFloat(), bgPaint)
 
-        // Layered Waves
         val shift = sin(progress * 6.0f) * 30f
         wavePath.reset()
         wavePath.moveTo(0f, HEIGHT * 0.7f)
@@ -174,12 +170,10 @@ class VideoRenderer(private val context: Context) {
     }
 
     private fun drawFireEmbers(canvas: Canvas, progress: Float) {
-        // Warm dark radial gradient
         val radShader = RadialGradient(WIDTH / 2f, HEIGHT.toFloat(), WIDTH.toFloat() * 0.8f, intArrayOf(AndroidColor.parseColor("#7C2D12"), AndroidColor.parseColor("#451A03"), AndroidColor.parseColor("#180A03")), floatArrayOf(0f, 0.5f, 1f), Shader.TileMode.CLAMP)
         bgPaint.shader = radShader
         canvas.drawRect(0f, 0f, WIDTH.toFloat(), HEIGHT.toFloat(), bgPaint)
 
-        // Rising Sparks
         val sparkCoords = listOf(120f to 0.8f, 240f to 0.5f, 360f to 0.9f, 480f to 0.3f, 600f to 0.7f, 200f to 0.2f, 500f to 0.6f)
         for ((idx, coord) in sparkCoords.withIndex()) {
             val yOffset = ((progress + coord.second) % 1.0f) * HEIGHT
@@ -197,91 +191,67 @@ class VideoRenderer(private val context: Context) {
         canvas.drawRect(0f, 0f, WIDTH.toFloat(), HEIGHT.toFloat(), vignettePaint)
     }
 
-    private fun getBadgeForScene(scene: String, templateType: String): String {
-        return when {
-            scene.uppercase() == "NIGHT_SKY" -> "🌌 NIGHT SKY STORY"
-            scene.uppercase() == "OCEAN" -> "🌊 OCEAN TIDE"
-            scene.uppercase() == "FIRE_EMBERS" -> "🔥 FIRE & EMBERS"
-            else -> when (templateType.lowercase()) {
-                "riddle" -> "🧠 BRAIN TEASER"
-                "quote" -> "💡 INSPIRATION"
-                "listicle" -> "📌 KEY POINTS"
-                else -> "🔥 VIRAL STORY"
-            }
-        }
-    }
-
-    private fun drawTemplateContent(canvas: Canvas, slide: SlideData, contentWidth: Int, marginX: Int, topBound: Float, textColor: Int, accentColor: Int, animAlpha: Float, badge: String) {
-        // Badge
-        val badgePaint = Paint().apply {
-            color = accentColor
-            alpha = (255 * animAlpha).toInt()
+    private fun drawKineticText(
+        canvas: Canvas,
+        slide: SlideData,
+        contentWidth: Int,
+        marginX: Int,
+        topBound: Float,
+        bottomBound: Float,
+        textColor: Int,
+        accentColor: Int,
+        progress: Float,
+        animAlpha: Float
+    ) {
+        // Dark overlay behind text for guaranteed contrast on any background
+        val overlayPaint = Paint().apply {
+            color = AndroidColor.parseColor("#44000000")
             style = Paint.Style.FILL
             isAntiAlias = true
         }
-        val textPaint = Paint().apply {
-            color = AndroidColor.BLACK
-            alpha = (255 * animAlpha).toInt()
-            textSize = 28f
-            isAntiAlias = true
-            typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
-            textAlign = Paint.Align.CENTER
-        }
-        val textWidth = textPaint.measureText(badge)
-        val badgeRect = RectF(marginX.toFloat(), topBound, marginX + textWidth + 48f, topBound + 52f)
-        canvas.drawRoundRect(badgeRect, 26f, 26f, badgePaint)
-        canvas.drawText(badge, marginX + (textWidth + 48f) / 2f, topBound + 36f, textPaint)
+        canvas.drawRoundRect(RectF(marginX.toFloat() - 20f, topBound + 20f, (WIDTH - marginX + 20).toFloat(), bottomBound - 20f), 28f, 28f, overlayPaint)
 
-        // Headline
+        // Word-by-word kinetic typography timing calculation (Step 3)
+        val headlineWords = slide.headline.split(" ")
+        val visibleWordCount = ((progress * headlineWords.size * 1.5f).toInt()).coerceIn(1, headlineWords.size)
+        val partialHeadline = headlineWords.take(visibleWordCount).joinToString(" ")
+
+        // Headline Paint with soft glow/shadow
         val titlePaint = TextPaint().apply {
             color = textColor
             alpha = (255 * animAlpha).toInt()
-            textSize = 58f
+            textSize = 54f
             isAntiAlias = true
             typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
-            setShadowLayer(12f, 0f, 4f, AndroidColor.BLACK)
+            setShadowLayer(16f, 0f, 4f, AndroidColor.BLACK)
         }
-        val titleLayout = StaticLayout.Builder.obtain(slide.headline, 0, slide.headline.length, titlePaint, contentWidth)
+
+        val titleLayout = StaticLayout.Builder.obtain(partialHeadline, 0, partialHeadline.length, titlePaint, contentWidth - 40)
             .setAlignment(Layout.Alignment.ALIGN_CENTER)
             .build()
 
         canvas.save()
-        canvas.translate(marginX.toFloat(), topBound + 120f)
+        canvas.translate((marginX + 20).toFloat(), topBound + 80f)
         titleLayout.draw(canvas)
         canvas.restore()
 
-        // Card & Body
-        val cardTop = topBound + 380f
-        val cardBottom = cardTop + 450f
-        canvas.drawRoundRect(RectF(marginX.toFloat() - 20f, cardTop, (WIDTH - marginX + 20).toFloat(), cardBottom), 24f, 24f, cardPaint)
-
-        borderPaint.color = accentColor
-        borderPaint.alpha = (150 * animAlpha).toInt()
-        canvas.drawRoundRect(RectF(marginX.toFloat() - 20f, cardTop, (WIDTH - marginX + 20).toFloat(), cardBottom), 24f, 24f, borderPaint)
-
+        // Body Text
         val bodyPaint = TextPaint().apply {
             color = textColor
             alpha = (255 * animAlpha).toInt()
-            textSize = 42f
+            textSize = 38f
             isAntiAlias = true
-            setShadowLayer(8f, 0f, 2f, AndroidColor.BLACK)
+            setShadowLayer(10f, 0f, 2f, AndroidColor.BLACK)
         }
+
         val bodyLayout = StaticLayout.Builder.obtain(slide.body, 0, slide.body.length, bodyPaint, contentWidth - 40)
             .setAlignment(Layout.Alignment.ALIGN_CENTER)
             .build()
 
         canvas.save()
-        canvas.translate(marginX.toFloat() + 20f, cardTop + 60f)
+        canvas.translate((marginX + 20).toFloat(), topBound + 350f)
         bodyLayout.draw(canvas)
         canvas.restore()
-    }
-
-    private fun adjustColorBrightness(color: Int, factor: Float): Int {
-        val a = AndroidColor.alpha(color)
-        val r = (AndroidColor.red(color) * factor).toInt().coerceIn(0, 255)
-        val g = (AndroidColor.green(color) * factor).toInt().coerceIn(0, 255)
-        val b = (AndroidColor.blue(color) * factor).toInt().coerceIn(0, 255)
-        return AndroidColor.argb(a, r, g, b)
     }
 
     fun renderProjectToMp4(slides: List<SlideData>, theme: Theme, outputFileName: String = "reel_${System.currentTimeMillis()}.mp4"): File? {
@@ -364,8 +334,12 @@ class VideoRenderer(private val context: Context) {
                 }
             }
 
+            var totalFrameTimeMs = 0L
+            var frameCount = 0
+
             for ((index, slide) in slides.withIndex()) {
                 for (i in 0 until totalFramesPerSlide) {
+                    val startTime = System.currentTimeMillis()
                     val animProgress = i.toFloat() / totalFramesPerSlide.toFloat()
                     val slideBitmap = drawSlideBitmap(slide, theme, index, slides.size, animProgress)
 
@@ -377,16 +351,23 @@ class VideoRenderer(private val context: Context) {
                     }
                     slideBitmap.recycle()
 
+                    val frameTime = System.currentTimeMillis() - startTime
+                    totalFrameTimeMs += frameTime
+                    frameCount++
+
                     drainEncoder(false)
                 }
             }
+
+            val avgFrameTimeMs = if (frameCount > 0) totalFrameTimeMs.toFloat() / frameCount else 0f
+            Log.i(TAG, "PERFORMANCE: Average frame render time = $avgFrameTimeMs ms per frame ($frameCount frames total)")
 
             drainEncoder(true)
             saveVideoToMediaStore(outputFile)
 
             return outputFile
         } catch (e: Exception) {
-            Log.e(TAG, "Error rendering cinematic scene video", e)
+            Log.e(TAG, "Error rendering kinetic typography video", e)
             return null
         } finally {
             try {
@@ -403,7 +384,7 @@ class VideoRenderer(private val context: Context) {
 
     private fun saveVideoToMediaStore(videoFile: File): Boolean {
         val values = ContentValues().apply {
-            put(MediaStore.Video.Media.DISPLAY_NAME, "ReelCraft_Cinematic_${System.currentTimeMillis()}.mp4")
+            put(MediaStore.Video.Media.DISPLAY_NAME, "ReelCraft_Kinetic_${System.currentTimeMillis()}.mp4")
             put(MediaStore.Video.Media.MIME_TYPE, "video/mp4")
             put(MediaStore.Video.Media.RELATIVE_PATH, Environment.DIRECTORY_MOVIES + "/ReelCraft")
         }
