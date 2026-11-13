@@ -2,8 +2,6 @@ package com.hamza.reelcraft.data
 
 import android.content.Context
 import android.util.Log
-import com.hamza.reelcraft.model.LayerConfig
-import com.hamza.reelcraft.model.LayerType
 import com.hamza.reelcraft.model.SceneGenerator
 import com.hamza.reelcraft.model.SlideData
 import kotlinx.coroutines.Dispatchers
@@ -28,116 +26,133 @@ object AiGenerator {
         }
 
         return withContext(Dispatchers.IO) {
-            try {
-                val cleanTopic = if (topic.isBlank()) niche else topic
-                val defaultStyle = SlideData.getDefaultVoiceStyle(niche)
-                val prompt = """
-                    Tum ek mahir short-video scriptwriter ho jo Urdu/Roman Urdu/Hindi mein viral Reels likhta hai. Tumhara kaam 25-40 second ki voiceover script likhna hai jo viewer ko pehle 3 second mein pakar le aur aakhir tak rokay rakhe. Topic: '$cleanTopic' in niche '$niche'.
+            var attempt = 0
+            while (attempt < 2) {
+                try {
+                    val cleanTopic = if (topic.isBlank()) niche else topic
+                    val defaultStyle = SlideData.getDefaultVoiceStyle(niche)
+                    val prompt = """
+                        Tum ek mahir short-video scriptwriter ho jo Urdu/Roman Urdu/Hindi mein viral Reels likhta hai. Tumhara kaam 25-40 second ki voiceover script likhna hai jo viewer ko pehle 3 second mein pakar le aur aakhir tak rokay rakhe. Topic: '$cleanTopic' in niche '$niche'.
 
-                    STRUCTURE (6-8 slides):
-                    1. HOOK (slide 1): 3 second se kam. Seedha ajeeb, khofnaak, hairan karne wali ya sawaliya baat. Taaruf nahi. 'Aaj hum...' ya 'Dosto...' se shuru karna mana hai.
-                    2. SETUP (1-2 slides): maahol aur kirdar, ek khaas tafseel ke saath (waqt, jagah, awaaz, chiz).
-                    3. ESCALATION (2-3 slides): har slide pichli se zyada tension ya hairat. Har slide ka aakhir ek adhoora sawal ya moor ho.
-                    4. TWIST/PAYOFF (1 slide): ghair mutawaqqe, yaad rehne wali baat.
-                    5. LOOP/CLIFFHANGER (aakhri slide): aisa khatma jo pehli slide se jur jaye ya Part 2 ki khwahish chhor de.
+                        DO-PASS GENERATION INSTRUCTION:
+                        Pass 1: Draft the initial high-tension viral script.
+                        Pass 2 (Self-Critique & Refine): Read your draft from a Reels viewer's perspective. Are any slides dry, generic, or too long? Make them punchier, faster, and tenser. Ensure the hook is absolute killer. Output ONLY the final refined JSON.
 
-                    STYLE KE QAIDE:
-                    - Har slide ka voiceText 8-15 lafz. Chhote jumlay. Bolchal ki zubaan, kitabi nahi. Jaise dost ko raaz bata rahe ho.
-                    - Khaas tafseel use karo: naam, adad, waqt, jagah, awaaz, bu, ehsaas. 'Ek din kuch hua' jaisa aam jumla mana hai.
-                    - Mana hai: 'aaj hum dekhenge', 'dosto', 'is kahani se humein yeh sabaq milta hai', moral lecture, cliche filler, hashiya, aur 'ajeeb', 'dilchasp' jaise khokhle lafz.
-                    - Zubaan: jo language user ne chuni, usi mein. Roman Urdu ho to roz marra bolchal wali (jaise 'main ne', 'wo', 'phir', 'achanak'), ghalat ya ajeeb hijje nahi.
-                    - Har slide ka ek 'emphasisWords' (1-2 sab se ahem lafz as an array of strings).
+                        STRUCTURE (6-8 slides):
+                        1. HOOK (slide 1): 3 second se kam. Seedha ajeeb, khofnaak, hairan karne wali ya sawaliya baat. Taaruf nahi. 'Aaj hum...' ya 'Dosto...' se shuru karna mana hai.
+                        2. SETUP (1-2 slides): maahol aur kirdar, ek khaas tafseel ke saath (waqt, jagah, awaaz, chiz).
+                        3. ESCALATION (2-3 slides): har slide pichli se zyada tension ya hairat. Har slide ka aakhir ek adhoora sawal ya moor ho.
+                        4. TWIST/PAYOFF (1 slide): ghair mutawaqqe, yaad rehne wali baat.
+                        5. LOOP/CLIFFHANGER (aakhri slide): aisa khatma jo pehli slide se jur jaye ya Part 2 ki khwahish chhor de.
 
-                    NICHE KE HISAB SE TONE:
-                    - Horror: dheema, sarsarata, tafseeli dehshat. Anjaam mein zabardast twist.
-                    - Story: jazbati, mod aur takrao wala.
-                    - Motivation: sachchi kahani se shuru (naam, shehar, mushkil), phir 1 dhamaakedaar sabaq jo shuru mein hook ban chuka ho.
-                    - Riddle/Quiz: ajeeb sawal, 3 second ki khamoshi ka suspense, phir jawab jo hairat mein daale.
-                    - Facts: 'tumhe pata hai...' ki bajaye seedha hairan kar dene wala adad ya haqiqat.
-                    - Shayari: naram, jazbati, 2-2 misron ke tukron mein.
-                    - Islamic: adab aur sukoon ke saath, sahih hawalay, ghair mustanad baat nahi.
+                        STYLE KE QAIDE:
+                        - Har slide ka voiceText 8-15 lafz. Chhote jumlay. Bolchal ki zubaan, kitabi nahi. Jaise dost ko raaz bata rahe ho.
+                        - Khaas tafseel use karo: naam, adad, waqt, jagah, awaaz, bu, ehsaas. 'Ek din kuch hua' jaisa aam jumla mana hai.
+                        - Mana hai: 'aaj hum dekhenge', 'dosto', 'is kahani se humein yeh sabaq milta hai', moral lecture, cliche filler, hashiya, aur 'ajeeb', 'dilchasp' jaise khokhle lafz.
+                        - Zubaan: jo language user ne chuni, usi mein. Roman Urdu ho to roz marra bolchal wali, ghalat ya ajeeb hijje nahi.
+                        - Har slide ka ek 'emphasisWords' (1-2 sab se ahem lafz as an array of strings).
 
-                    FEW-SHOT EXAMPLES (Style learning only, do not copy verbatim):
-                    Example 1 (Horror):
-                    [{"templateType":"story","headline":"Raat 3 baje","body":"Raat 3 baje ammi ne mujhe awaaz di. Masla yeh tha... ammi ko guzre 2 saal ho chuke the.","voiceText":"Raat 3 baje ammi ne mujhe awaaz di.","voiceStyle":"WHISPER_SLOW","bgMood":"horror","bgScene":"NIGHT_SKY","emphasisWords":["raat 3 baje","ammi"],"accentColor":"#FF4D8D"},
-                    {"templateType":"story","headline":"Khamoshi","body":"Main ne razai munh par kheench li. Awaaz phir aayi... bilkul darwaze ke peechay se.","voiceText":"Awaaz phir aayi darwaze ke peechay se.","voiceStyle":"WHISPER_SLOW","bgMood":"horror","bgScene":"NIGHT_SKY","emphasisWords":["razai","peechay"],"accentColor":"#FF4D8D"}]
+                        FEW-SHOT EXAMPLES (Style learning only, do not copy verbatim):
+                        Example 1 (Horror):
+                        [{"templateType":"story","headline":"Raat 3 baje","body":"Raat 3 baje ammi ne mujhe awaaz di. Masla yeh tha... ammi ko guzre 2 saal ho chuke the.","voiceText":"Raat 3 baje ammi ne mujhe awaaz di.","voiceStyle":"WHISPER_SLOW","bgMood":"horror","bgScene":"NIGHT_SKY","emphasisWords":["raat 3 baje","ammi"],"accentColor":"#FF4D8D"},
+                        {"templateType":"story","headline":"Khamoshi","body":"Main ne razai munh par kheench li. Awaaz phir aayi... bilkul darwaze ke peechay se.","voiceText":"Awaaz phir aayi darwaze ke peechay se.","voiceStyle":"WHISPER_SLOW","bgMood":"horror","bgScene":"NIGHT_SKY","emphasisWords":["razai","peechay"],"accentColor":"#FF4D8D"}]
 
-                    Example 2 (Riddle):
-                    [{"templateType":"riddle","headline":"Dunya ki aisi cheez","body":"Dunya ki aisi kaun si cheez hai jo paida hote hi udne lagti hai? Bina paron ke.","voiceText":"Paida hote hi udne lagti hai bina paron ke.","voiceStyle":"SUSPENSE","bgMood":"riddle","bgScene":"CYBER_GRID","emphasisWords":["udne lagti hai"],"accentColor":"#22D3EE"},
-                    {"templateType":"riddle","headline":"Sochiye","body":"99% log pehli koshish mein haar maan lete hain. Waqt khatam ho raha hai.","voiceText":"99% log haar maan lete hain.","voiceStyle":"SUSPENSE","bgMood":"riddle","bgScene":"CYBER_GRID","emphasisWords":["99% log"],"accentColor":"#22D3EE"}]
+                        Example 2 (Riddle):
+                        [{"templateType":"riddle","headline":"Dunya ki aisi cheez","body":"Dunya ki aisi kaun si cheez hai jo paida hote hi udne lagti hai? Bina paron ke.","voiceText":"Paida hote hi udne lagti hai bina paron ke.","voiceStyle":"SUSPENSE","bgMood":"riddle","bgScene":"CYBER_GRID","emphasisWords":["udne lagti hai"],"accentColor":"#22D3EE"},
+                        {"templateType":"riddle","headline":"Sochiye","body":"99% log pehli koshish mein haar maan lete hain. Waqt khatam ho raha hai.","voiceText":"99% log haar maan lete hain.","voiceStyle":"SUSPENSE","bgMood":"riddle","bgScene":"CYBER_GRID","emphasisWords":["99% log"],"accentColor":"#22D3EE"}]
 
-                    AKHRI CHEEZ: Pehle andar hi andar 3 alag hook sochho, sab se mazboot wala chuno, aur sirf wohi likho.
-                    Return ONLY a valid JSON array of 6 to 8 objects with keys: 'templateType', 'headline', 'body', 'voiceText', 'voiceStyle', 'bgMood', 'bgScene', 'emphasisWords', 'accentColor'. No markdown, pure JSON array.
-                """.trimIndent()
+                        Return ONLY a valid JSON array of 6 to 8 objects with keys: 'templateType', 'headline', 'body', 'voiceText', 'voiceStyle', 'bgMood', 'bgScene', 'emphasisWords', 'accentColor'. No markdown, pure JSON array.
+                    """.trimIndent()
 
-                val url = URL("https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=$apiKey")
-                val connection = (url.openConnection() as HttpURLConnection).apply {
-                    requestMethod = "POST"
-                    setRequestProperty("Content-Type", "application/json; charset=utf-8")
-                    doOutput = true
-                    connectTimeout = 15000
-                    readTimeout = 15000
-                }
-
-                val jsonBody = JSONObject().apply {
-                    put("contents", JSONArray().put(
-                        JSONObject().put("parts", JSONArray().put(
-                            JSONObject().put("text", prompt)
-                        ))
-                    ))
-                    put("generationConfig", JSONObject().put("responseMimeType", "application/json").put("temperature", 1.1))
-                }
-
-                connection.outputStream.use { os ->
-                    val input = jsonBody.toString().toByteArray(Charsets.UTF_8)
-                    os.write(input, 0, input.size)
-                }
-
-                val responseCode = connection.responseCode
-                if (responseCode == HttpURLConnection.HTTP_OK) {
-                    val responseStream = BufferedReader(InputStreamReader(connection.inputStream, Charsets.UTF_8))
-                    val responseStr = responseStream.readText()
-                    responseStream.close()
-
-                    val root = JSONObject(responseStr)
-                    val candidates = root.getJSONArray("candidates")
-                    val content = candidates.getJSONObject(0).getJSONObject("content")
-                    val parts = content.getJSONArray("parts")
-                    val textOutput = parts.getJSONObject(0).getString("text")
-
-                    val jsonArray = JSONArray(textOutput)
-                    val slides = mutableListOf<SlideData>()
-                    for (i in 0 until jsonArray.length()) {
-                        val obj = jsonArray.optJSONObject(i) ?: continue
-                        val bodyText = obj.optString("body", "Body content")
-                        val vText = obj.optString("voiceText", bodyText.take(80))
-                        val bgMood = obj.optString("bgMood", niche)
-
-                        val uniqueScene = SceneGenerator.pickUniquePreset(recentPresets, projectSeed + i)
-                        securePrefs.addRecentPresetId(uniqueScene)
-
-                        slides.add(
-                            SlideData(
-                                templateType = obj.optString("templateType", "story"),
-                                headline = obj.optString("headline", "Heading"),
-                                body = bodyText,
-                                voiceText = vText,
-                                voiceStyle = obj.optString("voiceStyle", defaultStyle),
-                                bgScene = bgMood.ifBlank { uniqueScene },
-                                accentColor = obj.optString("accentColor", "#22D3EE"),
-                                seed = projectSeed + i
-                            )
-                        )
+                    val url = URL("https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=$apiKey")
+                    val connection = (url.openConnection() as HttpURLConnection).apply {
+                        requestMethod = "POST"
+                        setRequestProperty("Content-Type", "application/json; charset=utf-8")
+                        doOutput = true
+                        connectTimeout = 15000
+                        readTimeout = 15000
                     }
-                    if (slides.isNotEmpty()) return@withContext slides
-                } else {
-                    Log.e(TAG, "Gemini API error code: $responseCode")
+
+                    val jsonBody = JSONObject().apply {
+                        put("contents", JSONArray().put(
+                            JSONObject().put("parts", JSONArray().put(
+                                JSONObject().put("text", prompt)
+                            ))
+                        ))
+                        put("generationConfig", JSONObject().put("responseMimeType", "application/json").put("temperature", 1.2).put("topP", 0.95))
+                    }
+
+                    connection.outputStream.use { os ->
+                        val input = jsonBody.toString().toByteArray(Charsets.UTF_8)
+                        os.write(input, 0, input.size)
+                    }
+
+                    val responseCode = connection.responseCode
+                    if (responseCode == HttpURLConnection.HTTP_OK) {
+                        val responseStream = BufferedReader(InputStreamReader(connection.inputStream, Charsets.UTF_8))
+                        val responseStr = responseStream.readText()
+                        responseStream.close()
+
+                        val root = JSONObject(responseStr)
+                        val candidates = root.getJSONArray("candidates")
+                        val content = candidates.getJSONObject(0).getJSONObject("content")
+                        val parts = content.getJSONArray("parts")
+                        val textOutput = parts.getJSONObject(0).getString("text")
+
+                        val jsonArray = JSONArray(textOutput)
+                        val slides = mutableListOf<SlideData>()
+                        for (i in 0 until jsonArray.length()) {
+                            val obj = jsonArray.optJSONObject(i) ?: continue
+                            val bodyText = obj.optString("body", "Body content")
+                            val vText = obj.optString("voiceText", bodyText.take(80))
+                            val bgMood = obj.optString("bgMood", niche)
+
+                            val uniqueScene = SceneGenerator.pickUniquePreset(recentPresets, projectSeed + i)
+                            securePrefs.addRecentPresetId(uniqueScene)
+
+                            slides.add(
+                                SlideData(
+                                    templateType = obj.optString("templateType", "story"),
+                                    headline = obj.optString("headline", "Heading"),
+                                    body = bodyText,
+                                    voiceText = vText,
+                                    voiceStyle = obj.optString("voiceStyle", defaultStyle),
+                                    bgScene = bgMood.ifBlank { uniqueScene },
+                                    accentColor = obj.optString("accentColor", "#22D3EE"),
+                                    seed = projectSeed + i
+                                )
+                            )
+                        }
+
+                        // Step 4 Validation check
+                        if (validateAndCleanSlides(slides)) {
+                            return@withContext slides
+                        }
+                    } else {
+                        Log.e(TAG, "Gemini API error code: $responseCode")
+                    }
+                } catch (_: Exception) {
+                    Log.e(TAG, "Failed to call Gemini API on attempt $attempt, retrying")
                 }
-            } catch (_: Exception) {
-                Log.e(TAG, "Failed to call Gemini API, falling back")
+                attempt++
             }
             getFallbackSlides(context, niche, topic)
         }
+    }
+
+    private fun validateAndCleanSlides(slides: List<SlideData>): Boolean {
+        if (slides.isEmpty()) return false
+        val firstWords = slides[0].voiceText.split(" ").filter { it.isNotBlank() }
+        if (firstWords.size > 15) return false
+
+        val banned = listOf("aaj hum", "dosto", "is kahani se", "sabaq")
+        for (slide in slides) {
+            val text = (slide.voiceText + " " + slide.body).lowercase()
+            for (b in banned) {
+                if (text.contains(b)) return false
+            }
+        }
+        return true
     }
 
     private fun getFallbackSlides(context: Context, niche: String, topic: String): List<SlideData> {
@@ -168,10 +183,23 @@ object AiGenerator {
                 SlideData("story", "Sochiye", "99% log pehli koshish mein haar maan lete hain. Kya aapko pata hai?", voiceText = "99% log pehli koshish mein haar maan gaye.", voiceStyle = "SUSPENSE", accentColor = "#22D3EE"),
                 SlideData("quote", "Jawab", "Sahi jawab hai... dhuan! Kaisa laga?", voiceText = "Sahi jawab hai dhuan!", voiceStyle = "SUSPENSE", accentColor = "#22D3EE")
             )
+            "space fact" -> listOf(
+                SlideData("story", "Black Hole", "Agar aap ek black hole ke paas gaye, toh aapka waqt ruk jayega.", voiceText = "Black hole ke paas waqt ruk jata hai.", voiceStyle = "SERENE_MALE", accentColor = "#38BDF8"),
+                SlideData("story", "Gravity", "Wahan gravity itni taqatwar hai ke roshni bhi nahi bach pati.", voiceText = "Roshni bhi black hole se nahi bach pati.", voiceStyle = "SERENE_MALE", accentColor = "#38BDF8"),
+                SlideData("quote", "Cosmos", "Dunya se baahar ek aisi dunya hai jo humari soch se bhi pare hai.", voiceText = "Dunya se baahar ek alag dunya hai.", voiceStyle = "SERENE_MALE", accentColor = "#38BDF8")
+            )
+            "shayari" -> listOf(
+                SlideData("quote", "Tanhai", "Woh jo hum se rooth ke baithe hain, shayad unhein humari yaad nahi aati.", voiceText = "Woh jo hum se rooth ke baithe hain.", voiceStyle = "SOFT_EMOTIONAL", accentColor = "#E879F9"),
+                SlideData("quote", "Aankhein", "Aankhon mein nami hai aur dil mein bas ek hi faryad hai.", voiceText = "Aankhon mein nami aur dil mein faryad.", voiceStyle = "SOFT_EMOTIONAL", accentColor = "#E879F9")
+            )
+            "islamic quote" -> listOf(
+                SlideData("quote", "Sabr", "Jab sab kuch bikhar jaye, toh yaad rakho Allah sabar karne walon ke sath hai.", voiceText = "Allah sabar karne walon ke sath hai.", voiceStyle = "CALM_NARRATOR", accentColor = "#34D399"),
+                SlideData("quote", "Umeed", "Namaz dil ka sukoon hai. Har mushkil ke baad aasaani hai.", voiceText = "Har mushkil ke baad aasaani hai.", voiceStyle = "CALM_NARRATOR", accentColor = "#34D399")
+            )
             else -> listOf(
-                SlideData("story", "Ghaflat", "Waqt kisi ke liye nahi rukta. Jab tak aap so rahe hain, koi aur jeet raha hai.", voiceText = "Waqt kisi ke liye nahi rukta.", voiceStyle = "CALM_NARRATOR", accentColor = "#7C4DFF"),
-                SlideData("story", "Faisla", "Aaj ka ek chhota qadam aapka kal badal sakta hai.", voiceText = "Aaj ka ek chhota qadam kal badal dega.", voiceStyle = "CALM_NARRATOR", accentColor = "#7C4DFF"),
-                SlideData("quote", "Utho", "Der mat karo, abhi shuru karo.", voiceText = "Der mat karo, abhi shuru karo.", voiceStyle = "ENERGETIC", accentColor = "#7C4DFF")
+                SlideData("story", "Ghaflat", "Waqt kisi ke liye nahi rukta. Jab tak aap so rahe hain, koi aur jeet raha hai.", voiceText = "Waqt kisi ke liye nahi rukta.", voiceStyle = defaultStyle, accentColor = "#7C4DFF"),
+                SlideData("story", "Faisla", "Aaj ka ek chhota qadam aapka kal badal sakta hai.", voiceText = "Aaj ka ek chhota qadam kal badal dega.", voiceStyle = defaultStyle, accentColor = "#7C4DFF"),
+                SlideData("quote", "Utho", "Der mat karo, abhi shuru karo.", voiceText = "Der mat karo, abhi shuru karo.", voiceStyle = defaultStyle, accentColor = "#7C4DFF")
             )
         }
 
