@@ -1,7 +1,6 @@
 package com.hamza.reelcraft.model
 
 import android.graphics.Color
-import kotlin.math.abs
 import kotlin.random.Random
 
 enum class LayerType {
@@ -127,28 +126,73 @@ object SceneGenerator {
         )
     )
 
-    fun getSpec(name: String, seed: Long): SceneSpec {
-        val upper = name.uppercase().trim()
-        val baseSpec = presets[upper] ?: generateFromSeed(seed, upper)
-
-        // Step 2: Seed-based palette variation (Hue +- 30 deg, saturation, brightness)
-        val rng = Random(seed)
-        val adjustedPalette = baseSpec.palette.mapIndexed { idx, color ->
-            adjustColor(color, seed, idx)
+    fun getContextualSpec(contextText: String, niche: String, bgMood: String, seed: Long, slideIndex: Int, totalSlides: Int): SceneSpec {
+        val query = "$contextText $niche $bgMood".lowercase()
+        val baseSpec = when {
+            query.contains("horror") || query.contains("dar") || query.contains("bhoot") ->
+                SceneSpec("STORM_HORROR", listOf(Color.parseColor("#180A0A"), Color.parseColor("#450A0A")), 1.0f, listOf(
+                    LayerConfig(LayerType.GRADIENT_SKY, 0.1f, colors = listOf(Color.parseColor("#180A0A"), Color.parseColor("#450A0A"))),
+                    LayerConfig(LayerType.FOG, 0.4f),
+                    LayerConfig(LayerType.CITY_SILHOUETTE, 0.7f),
+                    LayerConfig(LayerType.RAIN_OR_SNOW, 1.2f, param1 = 30f)
+                ))
+            query.contains("motivation") || query.contains("kamyabi") || query.contains("success") ->
+                SceneSpec("SUNRISE_MOTIVATION", listOf(Color.parseColor("#7C2D12"), Color.parseColor("#B45309")), 1.0f, listOf(
+                    LayerConfig(LayerType.GRADIENT_SKY, 0.1f, colors = listOf(Color.parseColor("#451A03"), Color.parseColor("#B45309"))),
+                    LayerConfig(LayerType.LIGHT_RAYS, 0.5f, param1 = 6f),
+                    LayerConfig(LayerType.MOUNTAINS_OR_DUNES, 0.8f),
+                    LayerConfig(LayerType.CLOUDS, 1.0f)
+                ))
+            query.contains("space") || query.contains("science") || query.contains("dunya") ->
+                presets["MYSTIC_PURPLE"]!!
+            query.contains("islamic") || query.contains("dua") || query.contains("hadees") || query.contains("allah") ->
+                SceneSpec("MOSQUE_NIGHT", listOf(Color.parseColor("#0F172A"), Color.parseColor("#1E1B4B")), 1.0f, listOf(
+                    LayerConfig(LayerType.GRADIENT_SKY, 0.1f, colors = listOf(Color.parseColor("#090D16"), Color.parseColor("#1E1B4B"))),
+                    LayerConfig(LayerType.MOSQUE_SILHOUETTE, 0.6f),
+                    LayerConfig(LayerType.STARS, 0.3f, param1 = 35f),
+                    LayerConfig(LayerType.MOON_OR_SUN, 0.5f, colors = listOf(Color.parseColor("#FEF08A"), Color.parseColor("#FACC15")), param1 = 50f)
+                ))
+            query.contains("shayari") || query.contains("ishq") || query.contains("udasi") || query.contains("poetry") ->
+                SceneSpec("SHAYARI_BOKEH", listOf(Color.parseColor("#3B0764"), Color.parseColor("#581C87")), 1.0f, listOf(
+                    LayerConfig(LayerType.GRADIENT_SKY, 0.1f, colors = listOf(Color.parseColor("#3B0764"), Color.parseColor("#1E1B4B"))),
+                    LayerConfig(LayerType.BOKEH, 1.2f, param1 = 25f),
+                    LayerConfig(LayerType.RAIN_OR_SNOW, 1.0f, param1 = 15f)
+                ))
+            query.contains("riddle") || query.contains("quiz") || query.contains("puzzle") ->
+                presets["CYBER_GRID"]!!
+            query.contains("cricket") || query.contains("sports") || query.contains("game") ->
+                SceneSpec("SPORTS_GRID", listOf(Color.parseColor("#064E3B"), Color.parseColor("#022C22")), 1.0f, listOf(
+                    LayerConfig(LayerType.GRADIENT_SKY, 0.1f, colors = listOf(Color.parseColor("#064E3B"), Color.parseColor("#022C22"))),
+                    LayerConfig(LayerType.BOKEH, 1.1f, param1 = 20f),
+                    LayerConfig(LayerType.LIGHT_RAYS, 0.5f, param1 = 4f),
+                    LayerConfig(LayerType.GRID_OR_LINES, 0.9f)
+                ))
+            query.contains("history") || query.contains("lahore") || query.contains("punjab") ->
+                presets["GOLDEN_SAND"]!!
+            query.contains("ocean") || query.contains("nature") || query.contains("pani") ->
+                presets["OCEAN"]!!
+            else ->
+                presets[bgMood.uppercase()] ?: generateFromSeed(seed, bgMood)
         }
 
-        // Step 2: Seed-based layer variations (speeds, particle density, wave amplitudes)
-        val adjustedLayers = baseSpec.layers.map { layer ->
+        // Climax boost on final slide
+        val isClimax = slideIndex == totalSlides - 1
+        val intensityMultiplier = if (isClimax) 1.5f else 1.0f
+        val rng = Random(seed + slideIndex)
+
+        val variedPalette = baseSpec.palette.mapIndexed { idx, c -> adjustColor(c, seed + slideIndex, idx) }
+        val variedLayers = baseSpec.layers.map { layer ->
             layer.copy(
-                parallaxSpeed = (layer.parallaxSpeed * (0.8f + rng.nextFloat() * 0.4f)).coerceIn(0.1f, 2.0f),
-                param1 = layer.param1 * (0.7f + rng.nextFloat() * 0.6f),
-                colors = layer.colors.ifEmpty { adjustedPalette }
+                parallaxSpeed = (layer.parallaxSpeed + (slideIndex * 0.05f)).coerceIn(0.1f, 2.2f),
+                intensity = layer.intensity * intensityMultiplier,
+                param1 = layer.param1 * intensityMultiplier
             )
         }
 
         return baseSpec.copy(
-            palette = adjustedPalette,
-            layers = adjustedLayers
+            palette = variedPalette,
+            intensity = baseSpec.intensity * intensityMultiplier,
+            layers = variedLayers
         )
     }
 
@@ -170,16 +214,13 @@ object SceneGenerator {
             listOf(Color.parseColor("#064E3B"), Color.parseColor("#022C22"), Color.parseColor("#09090B")),
             listOf(Color.parseColor("#7C2D12"), Color.parseColor("#451A03"), Color.parseColor("#1C1917")),
             listOf(Color.parseColor("#3B0764"), Color.parseColor("#1E1B4B"), Color.parseColor("#09090B")),
-            listOf(Color.parseColor("#0C4A6E"), Color.parseColor("#1E3A8A"), Color.parseColor("#030712")),
-            listOf(Color.parseColor("#2E1065"), Color.parseColor("#701A75"), Color.parseColor("#09090B")),
-            listOf(Color.parseColor("#14532D"), Color.parseColor("#065F46"), Color.parseColor("#020617"))
+            listOf(Color.parseColor("#0C4A6E"), Color.parseColor("#1E3A8A"), Color.parseColor("#030712"))
         )
         val basePalette = palettes[rng.nextInt(palettes.size)]
         val palette = basePalette.mapIndexed { idx, c -> adjustColor(c, seed, idx) }
 
         val numLayers = rng.nextInt(3, 7)
         val selectedLayers = mutableListOf<LayerConfig>()
-
         selectedLayers.add(LayerConfig(LayerType.GRADIENT_SKY, parallaxSpeed = 0.1f, colors = palette))
 
         val possibleLayers = listOf(

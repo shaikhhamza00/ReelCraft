@@ -45,8 +45,8 @@ object SceneRenderer {
 
         for (layer in sortedLayers) {
             canvas.save()
-            val shiftX = sin(timeSec * 0.5f) * layer.parallaxSpeed * 10f
-            val shiftY = cos(timeSec * 0.3f) * layer.parallaxSpeed * 5f
+            val shiftX = sin(timeSec * 0.5f) * layer.parallaxSpeed * 10f * spec.intensity
+            val shiftY = cos(timeSec * 0.3f) * layer.parallaxSpeed * 5f * spec.intensity
             canvas.translate(shiftX, shiftY)
 
             drawLayer(canvas, layer, timeSec)
@@ -80,11 +80,11 @@ object SceneRenderer {
             LayerType.MOON_OR_SUN -> {
                 val c1 = colors.getOrElse(0) { AndroidColor.parseColor("#FFFBEB") }
                 val c2 = colors.getOrElse(1) { AndroidColor.parseColor("#FDE047") }
-                val moonPaint = Paint().apply { color = c1; isAntiAlias = true; setShadowLayer(30f, 0f, 0f, c2) }
+                val moonPaint = Paint().apply { color = c1; isAntiAlias = true; setShadowLayer(30f * layer.intensity, 0f, 0f, c2) }
                 canvas.drawCircle(WIDTH - 180f, 240f, layer.param1.coerceAtLeast(40f), moonPaint)
             }
             LayerType.WAVES -> {
-                val shift = sin(timeSec * 3.0f) * 30f
+                val shift = sin(timeSec * 3.0f) * 30f * layer.intensity
                 wavePath.reset()
                 wavePath.moveTo(0f, HEIGHT * 0.7f)
                 wavePath.cubicTo(WIDTH * 0.3f + shift, HEIGHT * 0.65f, WIDTH * 0.7f - shift, HEIGHT * 0.75f, WIDTH.toFloat(), HEIGHT * 0.7f)
@@ -108,15 +108,15 @@ object SceneRenderer {
                 for (i in 0 until count) {
                     val yOffset = ((timeSec + (i * 0.1f)) % 3.0f) / 3.0f * HEIGHT
                     val currentY = HEIGHT - yOffset
-                    val currentX = (i * 110f) % WIDTH + (sin(yOffset * 0.02f + i) * 20f)
+                    val currentX = (i * 110f) % WIDTH + (sin(yOffset * 0.02f + i) * 20f * layer.intensity)
                     sparkPaint.color = if (i % 2 == 0) AndroidColor.parseColor("#FDE047") else AndroidColor.parseColor("#FB923C")
                     sparkPaint.alpha = ((1.0f - (yOffset / HEIGHT)) * 255).toInt().coerceIn(0, 255)
-                    canvas.drawCircle(currentX, currentY, 5f, sparkPaint)
+                    canvas.drawCircle(currentX, currentY, 5f * layer.intensity, sparkPaint)
                 }
             }
             LayerType.GRID_OR_LINES -> {
                 gridPaint.color = colors.getOrElse(0) { AndroidColor.parseColor("#22D3EE") }
-                gridPaint.alpha = 100
+                gridPaint.alpha = (100 * layer.intensity).toInt().coerceIn(50, 255)
                 val horizonY = HEIGHT * 0.5f
                 val centerX = WIDTH / 2f
                 for (i in -5..5) {
@@ -145,7 +145,7 @@ object SceneRenderer {
                 wavePaint.shader = null
             }
             LayerType.SPACE_NEBULA -> {
-                val radShader = RadialGradient(WIDTH / 2f, HEIGHT * 0.4f, WIDTH.toFloat() * 0.9f, intArrayOf(AndroidColor.parseColor("#581C87"), AndroidColor.parseColor("#3B0764"), AndroidColor.parseColor("#09090B")), floatArrayOf(0f, 0.5f, 1f), Shader.TileMode.CLAMP)
+                val radShader = RadialGradient(WIDTH / 2f, HEIGHT * 0.4f, WIDTH.toFloat() * 0.9f * layer.intensity, intArrayOf(AndroidColor.parseColor("#581C87"), AndroidColor.parseColor("#3B0764"), AndroidColor.parseColor("#09090B")), floatArrayOf(0f, 0.5f, 1f), Shader.TileMode.CLAMP)
                 bgPaint.shader = radShader
                 canvas.drawRect(0f, 0f, WIDTH.toFloat(), HEIGHT.toFloat(), bgPaint)
             }
@@ -158,6 +158,55 @@ object SceneRenderer {
                 wavePath.close()
                 wavePaint.color = colors.getOrElse(0) { AndroidColor.parseColor("#1E293B") }
                 canvas.drawPath(wavePath, wavePaint)
+            }
+            LayerType.CITY_SILHOUETTE -> {
+                val buildingPaint = Paint().apply { color = colors.getOrElse(0) { AndroidColor.parseColor("#0F172A") }; isAntiAlias = true }
+                val windowPaint = Paint().apply { color = AndroidColor.parseColor("#FDE047"); isAntiAlias = true }
+                val buildingWidths = listOf(90f, 70f, 110f, 80f, 100f, 85f, 95f)
+                val buildingHeights = listOf(350f, 450f, 300f, 500f, 400f, 480f, 380f)
+                var currentX = 0f
+                for (i in buildingWidths.indices) {
+                    val w = buildingWidths[i]
+                    val h = buildingHeights[i] * layer.intensity
+                    val y = HEIGHT - h
+                    canvas.drawRect(currentX, y, currentX + w, HEIGHT.toFloat(), buildingPaint)
+                    if (i % 2 == 0) {
+                        canvas.drawRect(currentX + 15f, y + 30f, currentX + 35f, y + 60f, windowPaint)
+                        canvas.drawRect(currentX + 45f, y + 90f, currentX + 65f, y + 120f, windowPaint)
+                    }
+                    currentX += w
+                }
+            }
+            LayerType.MOSQUE_SILHOUETTE -> {
+                val mosquePaint = Paint().apply { color = colors.getOrElse(0) { AndroidColor.parseColor("#0B0F19") }; isAntiAlias = true }
+                canvas.drawRect(100f, HEIGHT - (350f * layer.intensity), WIDTH - 100f, HEIGHT.toFloat(), mosquePaint)
+                wavePath.reset()
+                wavePath.addArc(WIDTH / 2f - 120f, HEIGHT - (520f * layer.intensity), WIDTH / 2f + 120f, HEIGHT - (330f * layer.intensity), 180f, 180f)
+                canvas.drawPath(wavePath, mosquePaint)
+                canvas.drawRect(140f, HEIGHT - (600f * layer.intensity), 190f, HEIGHT.toFloat(), mosquePaint)
+                canvas.drawRect(WIDTH - 190f, HEIGHT - (600f * layer.intensity), WIDTH - 140f, HEIGHT.toFloat(), mosquePaint)
+            }
+            LayerType.RAIN_OR_SNOW -> {
+                val rainPaint = Paint().apply { color = AndroidColor.parseColor("#93C5FD"); strokeWidth = 3f; isAntiAlias = true }
+                val count = layer.param1.toInt().coerceIn(20, 60)
+                for (i in 0 until count) {
+                    val rx = (i * 47f) % WIDTH
+                    val ry = ((timeSec * 300f + (i * 31f)) % HEIGHT)
+                    canvas.drawLine(rx, ry, rx - 10f, ry + (40f * layer.intensity), rainPaint)
+                }
+            }
+            LayerType.CLOUDS -> {
+                val cloudPaint = Paint().apply { color = AndroidColor.parseColor("#334155"); alpha = (120 * layer.intensity).toInt().coerceIn(50, 255); isAntiAlias = true }
+                val shift = sin(timeSec * 1.5f) * 50f
+                canvas.drawCircle(150f + shift, 300f, 120f, cloudPaint)
+                canvas.drawCircle(260f + shift, 270f, 150f, cloudPaint)
+                canvas.drawCircle(500f - shift, 350f, 130f, cloudPaint)
+            }
+            LayerType.FOG -> {
+                val fogPaint = Paint().apply { isAntiAlias = true }
+                val fogGrad = LinearGradient(0f, HEIGHT * 0.5f, 0f, HEIGHT.toFloat(), intArrayOf(AndroidColor.TRANSPARENT, AndroidColor.parseColor("#66334155"), AndroidColor.TRANSPARENT), floatArrayOf(0f, 0.5f, 1f), Shader.TileMode.CLAMP)
+                fogPaint.shader = fogGrad
+                canvas.drawRect(0f, HEIGHT * 0.5f, WIDTH.toFloat(), HEIGHT.toFloat(), fogPaint)
             }
             else -> {
                 val c = colors.getOrElse(0) { AndroidColor.parseColor("#111827") }
