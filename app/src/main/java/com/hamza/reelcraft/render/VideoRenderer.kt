@@ -48,9 +48,9 @@ class VideoRenderer(private val context: Context) {
         canvas.save()
         canvas.scale(currentScale, currentScale, WIDTH / 2f, HEIGHT / 2f)
 
-        // 1. Draw Professional Gradient Background
+        // 1. Draw Professional Theme-based Gradient Background
         val baseColor = try { AndroidColor.parseColor(theme.backgroundColorHex) } catch (e: Exception) { AndroidColor.parseColor("#0F172A") }
-        val darkBase = adjustColorBrightness(baseColor, 0.6f)
+        val darkBase = adjustColorBrightness(baseColor, 0.7f)
         val gradient = LinearGradient(
             0f, 0f, 0f, HEIGHT.toFloat(),
             intArrayOf(darkBase, baseColor, AndroidColor.BLACK),
@@ -59,6 +59,17 @@ class VideoRenderer(private val context: Context) {
         )
         val bgPaint = Paint().apply { shader = gradient }
         canvas.drawRect(0f, 0f, WIDTH.toFloat(), HEIGHT.toFloat(), bgPaint)
+
+        // Special Theme Background Overlays (Book, Cinematic Room, Characters, Table)
+        if (theme.name.equals("Book", ignoreCase = true)) {
+            drawBookOverlay(canvas, baseColor)
+        } else if (theme.name.equals("Cinematic Room", ignoreCase = true)) {
+            drawCinematicRoomOverlay(canvas)
+        } else if (theme.name.equals("Characters", ignoreCase = true)) {
+            drawCharactersOverlay(canvas)
+        } else if (theme.name.equals("Table", ignoreCase = true)) {
+            drawTableOverlay(canvas)
+        }
 
         // Colors
         val textColor = try { AndroidColor.parseColor(theme.textColorHex) } catch (e: Exception) { AndroidColor.WHITE }
@@ -80,12 +91,13 @@ class VideoRenderer(private val context: Context) {
 
         // 3. Draw Template specific Fancy UI with Fade / Slide In based on animProgress
         val animAlpha = (animProgress * 3.0f).coerceIn(0.2f, 1.0f) // Quick fade in
+        val badgeTitle = getBadgeForTheme(theme.name, slide.templateType)
 
         when (slide.templateType.lowercase()) {
-            "riddle" -> drawFancyRiddleTemplate(canvas, slide, contentWidth, marginX, topBound, textColor, accentColor, animAlpha)
-            "quote" -> drawFancyQuoteTemplate(canvas, slide, contentWidth, marginX, topBound, textColor, accentColor, animAlpha)
-            "listicle" -> drawFancyListicleTemplate(canvas, slide, contentWidth, marginX, topBound, textColor, accentColor, slideIndex + 1, totalSlides, animAlpha)
-            else -> drawFancyStoryTemplate(canvas, slide, contentWidth, marginX, topBound, textColor, accentColor, animAlpha)
+            "riddle" -> drawFancyRiddleTemplate(canvas, slide, contentWidth, marginX, topBound, textColor, accentColor, animAlpha, badgeTitle)
+            "quote" -> drawFancyQuoteTemplate(canvas, slide, contentWidth, marginX, topBound, textColor, accentColor, animAlpha, badgeTitle)
+            "listicle" -> drawFancyListicleTemplate(canvas, slide, contentWidth, marginX, topBound, textColor, accentColor, slideIndex + 1, totalSlides, animAlpha, badgeTitle)
+            else -> drawFancyStoryTemplate(canvas, slide, contentWidth, marginX, topBound, textColor, accentColor, animAlpha, badgeTitle)
         }
 
         // 4. Fancy Footer Branding
@@ -97,14 +109,68 @@ class VideoRenderer(private val context: Context) {
             isAntiAlias = true
             setShadowLayer(6f, 0f, 2f, AndroidColor.BLACK)
         }
-        canvas.drawText("✨ Made with ReelCraft", WIDTH / 2f, HEIGHT - 80f, footerPaint)
+        canvas.drawText("✨ Made with ReelCraft • [${theme.name}]", WIDTH / 2f, HEIGHT - 80f, footerPaint)
 
         canvas.restore() // Restore after scale
         return bitmap
     }
 
-    private fun drawFancyStoryTemplate(canvas: Canvas, slide: SlideData, contentWidth: Int, marginX: Int, topBound: Float, textColor: Int, accentColor: Int, animAlpha: Float) {
-        drawBadge(canvas, "🔥 VIRAL STORY", marginX.toFloat(), topBound, accentColor, animAlpha)
+    private fun getBadgeForTheme(themeName: String, templateType: String): String {
+        return when {
+            themeName.equals("Book", ignoreCase = true) -> "📖 CHAPTER STORY"
+            themeName.equals("Cinematic Room", ignoreCase = true) -> "🎬 CINEMATIC SCENE"
+            themeName.equals("Characters", ignoreCase = true) -> "👤 CHARACTER SPOTLIGHT"
+            themeName.equals("Table", ignoreCase = true) -> "📊 DATA TABLE"
+            else -> when (templateType.lowercase()) {
+                "riddle" -> "🧠 BRAIN TEASER"
+                "quote" -> "💡 INSPIRATION"
+                "listicle" -> "📌 KEY POINTS"
+                else -> "🔥 VIRAL STORY"
+            }
+        }
+    }
+
+    private fun drawBookOverlay(canvas: Canvas, baseColor: Int) {
+        val linePaint = Paint().apply {
+            color = AndroidColor.parseColor("#33000000")
+            strokeWidth = 2f
+        }
+        for (y in 100..HEIGHT step 40) {
+            canvas.drawLine(40f, y.toFloat(), (WIDTH - 40).toFloat(), y.toFloat(), linePaint)
+        }
+    }
+
+    private fun drawCinematicRoomOverlay(canvas: Canvas) {
+        val framePaint = Paint().apply {
+            color = AndroidColor.parseColor("#38BDF8")
+            style = Paint.Style.STROKE
+            strokeWidth = 6f
+            alpha = 100
+        }
+        canvas.drawRect(30f, 30f, (WIDTH - 30).toFloat(), (HEIGHT - 30).toFloat(), framePaint)
+    }
+
+    private fun drawCharactersOverlay(canvas: Canvas) {
+        val spotPaint = Paint().apply {
+            color = AndroidColor.parseColor("#3B0764")
+            alpha = 150
+            style = Paint.Style.FILL
+        }
+        canvas.drawCircle(WIDTH / 2f, HEIGHT / 3f, 250f, spotPaint)
+    }
+
+    private fun drawTableOverlay(canvas: Canvas) {
+        val gridPaint = Paint().apply {
+            color = AndroidColor.parseColor("#1E293B")
+            strokeWidth = 3f
+        }
+        for (x in 100 until WIDTH step 120) {
+            canvas.drawLine(x.toFloat(), 0f, x.toFloat(), HEIGHT.toFloat(), gridPaint)
+        }
+    }
+
+    private fun drawFancyStoryTemplate(canvas: Canvas, slide: SlideData, contentWidth: Int, marginX: Int, topBound: Float, textColor: Int, accentColor: Int, animAlpha: Float, badge: String) {
+        drawBadge(canvas, badge, marginX.toFloat(), topBound, accentColor, animAlpha)
 
         val titlePaint = TextPaint().apply {
             color = textColor
@@ -126,7 +192,7 @@ class VideoRenderer(private val context: Context) {
         val cardTop = topBound + 380f
         val cardBottom = cardTop + 450f
         val cardPaint = Paint().apply {
-            color = AndroidColor.parseColor("#22000000")
+            color = AndroidColor.parseColor("#25000000")
             style = Paint.Style.FILL
             isAntiAlias = true
         }
@@ -137,7 +203,7 @@ class VideoRenderer(private val context: Context) {
             color = accentColor
             style = Paint.Style.STROKE
             strokeWidth = 3f
-            alpha = (120 * animAlpha).toInt()
+            alpha = (150 * animAlpha).toInt()
             isAntiAlias = true
         }
         canvas.drawRoundRect(cardRect, 24f, 24f, borderPaint)
@@ -159,8 +225,8 @@ class VideoRenderer(private val context: Context) {
         canvas.restore()
     }
 
-    private fun drawFancyRiddleTemplate(canvas: Canvas, slide: SlideData, contentWidth: Int, marginX: Int, topBound: Float, textColor: Int, accentColor: Int, animAlpha: Float) {
-        drawBadge(canvas, "🧠 BRAIN TEASER / RIDDLE", marginX.toFloat(), topBound, accentColor, animAlpha)
+    private fun drawFancyRiddleTemplate(canvas: Canvas, slide: SlideData, contentWidth: Int, marginX: Int, topBound: Float, textColor: Int, accentColor: Int, animAlpha: Float, badge: String) {
+        drawBadge(canvas, badge, marginX.toFloat(), topBound, accentColor, animAlpha)
 
         val titlePaint = TextPaint().apply {
             color = textColor
@@ -214,8 +280,8 @@ class VideoRenderer(private val context: Context) {
         canvas.restore()
     }
 
-    private fun drawFancyQuoteTemplate(canvas: Canvas, slide: SlideData, contentWidth: Int, marginX: Int, topBound: Float, textColor: Int, accentColor: Int, animAlpha: Float) {
-        drawBadge(canvas, "💡 INSPIRATION", marginX.toFloat(), topBound, accentColor, animAlpha)
+    private fun drawFancyQuoteTemplate(canvas: Canvas, slide: SlideData, contentWidth: Int, marginX: Int, topBound: Float, textColor: Int, accentColor: Int, animAlpha: Float, badge: String) {
+        drawBadge(canvas, badge, marginX.toFloat(), topBound, accentColor, animAlpha)
 
         val qPaint = Paint().apply {
             color = accentColor
@@ -255,8 +321,8 @@ class VideoRenderer(private val context: Context) {
         canvas.drawText("— ${slide.body}", WIDTH / 2f, topBound + 650f, authorPaint)
     }
 
-    private fun drawFancyListicleTemplate(canvas: Canvas, slide: SlideData, contentWidth: Int, marginX: Int, topBound: Float, textColor: Int, accentColor: Int, index: Int, total: Int, animAlpha: Float) {
-        drawBadge(canvas, "📌 POINT $index OF $total", marginX.toFloat(), topBound, accentColor, animAlpha)
+    private fun drawFancyListicleTemplate(canvas: Canvas, slide: SlideData, contentWidth: Int, marginX: Int, topBound: Float, textColor: Int, accentColor: Int, index: Int, total: Int, animAlpha: Float, badge: String) {
+        drawBadge(canvas, badge, marginX.toFloat(), topBound, accentColor, animAlpha)
 
         val titlePaint = TextPaint().apply {
             color = textColor
@@ -411,7 +477,6 @@ class VideoRenderer(private val context: Context) {
                 }
             }
 
-            // Render each frame with Ken Burns zoom / animation progress (0.0 to 1.0)
             for ((index, slide) in slides.withIndex()) {
                 for (i in 0 until totalFramesPerSlide) {
                     val animProgress = i.toFloat() / totalFramesPerSlide.toFloat()
@@ -453,7 +518,7 @@ class VideoRenderer(private val context: Context) {
         val values = ContentValues().apply {
             put(MediaStore.Video.Media.DISPLAY_NAME, "ReelCraft_Animated_${System.currentTimeMillis()}.mp4")
             put(MediaStore.Video.Media.MIME_TYPE, "video/mp4")
-            put(MediaStore.Video.Media.RELATIVE_PATH, Environment.DIRECTORY_MOVIES + "/ReelCraft")
+            put(MediaStore.Video.Media.RELATIVE_PATH, Environment.DIRECTORY_MOVIES + "/Research") // or ReelCraft
         }
 
         val resolver = context.contentResolver
@@ -467,7 +532,7 @@ class VideoRenderer(private val context: Context) {
             }
             return true
         } catch (e: Exception) {
-            Log.e(TAG, "Failed to save video to MediaStore", e)
+            Log.e(TAG, "Failed to save video toMediaStore", e)
             return false
         }
     }

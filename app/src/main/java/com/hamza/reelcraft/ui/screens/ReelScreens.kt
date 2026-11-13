@@ -34,7 +34,7 @@ fun HomeScreen(viewModel: ReelViewModel, onNavigateCreate: () -> Unit) {
             fontWeight = FontWeight.Bold
         )
         Text(
-            text = "Create faceless Urdu/English reels in 3 taps",
+            text = "Create cinematic Urdu/English reels in 3 taps",
             fontSize = 14.sp,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
@@ -95,8 +95,11 @@ fun HomeScreen(viewModel: ReelViewModel, onNavigateCreate: () -> Unit) {
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun CreateScreen(viewModel: ReelViewModel, onNavigatePreview: () -> Unit) {
+    var expandedKeyDropdown by remember { mutableStateOf(false) }
+
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -117,13 +120,59 @@ fun CreateScreen(viewModel: ReelViewModel, onNavigatePreview: () -> Unit) {
         )
         Spacer(modifier = Modifier.height(12.dp))
 
-        OutlinedTextField(
-            value = viewModel.apiKey,
-            onValueChange = { viewModel.apiKey = it },
-            label = { Text("Gemini API Key (Optional for AI)") },
-            visualTransformation = PasswordVisualTransformation(),
-            modifier = Modifier.fillMaxWidth()
-        )
+        // API Key Management UI
+        if (viewModel.savedApiKeys.isNotEmpty()) {
+            ExposedDropdownMenuBox(
+                expanded = expandedKeyDropdown,
+                onExpandedChange = { expandedKeyDropdown = !expandedKeyDropdown }
+            ) {
+                OutlinedTextField(
+                    value = viewModel.selectedApiKey.ifBlank { "Select saved API Key" },
+                    onValueChange = {},
+                    readOnly = true,
+                    label = { Text("Saved Gemini API Keys") },
+                    trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expandedKeyDropdown) },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .menuAnchor()
+                )
+                ExposedDropdownMenu(
+                    expanded = expandedKeyDropdown,
+                    onDismissRequest = { expandedKeyDropdown = false }
+                ) {
+                    viewModel.savedApiKeys.forEach { key ->
+                        DropdownMenuItem(
+                            text = { Text(if (key.length > 10) "${key.take(8)}...${key.takeLast(4)}" else key) },
+                            onClick = {
+                                viewModel.selectedApiKey = key
+                                expandedKeyDropdown = false
+                            }
+                        )
+                    }
+                }
+            }
+            Spacer(modifier = Modifier.height(8.dp))
+        }
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            OutlinedTextField(
+                value = viewModel.newKeyInput,
+                onValueChange = { viewModel.newKeyInput = it },
+                label = { Text("Add New Gemini API Key") },
+                visualTransformation = PasswordVisualTransformation(),
+                modifier = Modifier.weight(1f)
+            )
+            Button(
+                onClick = { viewModel.addApiKey(viewModel.newKeyInput) },
+                enabled = viewModel.newKeyInput.isNotBlank()
+            ) {
+                Text("Save Key")
+            }
+        }
         Spacer(modifier = Modifier.height(16.dp))
 
         Text(text = "Selected Niche: ${viewModel.selectedNiche}", fontWeight = FontWeight.Medium)
@@ -142,10 +191,27 @@ fun CreateScreen(viewModel: ReelViewModel, onNavigatePreview: () -> Unit) {
         }
         Spacer(modifier = Modifier.height(16.dp))
 
-        // Theme selector
-        Text(text = "Theme Vibe", fontWeight = FontWeight.SemiBold)
-        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            viewModel.themes.forEach { th ->
+        // Theme / Cinematic Style selector
+        Text(text = "Cinematic Vibe & Templates", fontWeight = FontWeight.SemiBold)
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(vertical = 4.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            viewModel.themes.take(4).forEach { th ->
+                FilterChip(
+                    selected = viewModel.selectedThemeName == th,
+                    onClick = { viewModel.selectedThemeName = th },
+                    label = { Text(th) }
+                )
+            }
+        }
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            viewModel.themes.drop(4).forEach { th ->
                 FilterChip(
                     selected = viewModel.selectedThemeName == th,
                     onClick = { viewModel.selectedThemeName = th },

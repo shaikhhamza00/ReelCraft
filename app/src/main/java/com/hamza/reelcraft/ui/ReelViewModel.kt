@@ -2,6 +2,7 @@ package com.hamza.reelcraft.ui
 
 import android.content.Context
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
@@ -18,9 +19,14 @@ import java.io.File
 class ReelViewModel : ViewModel() {
     var selectedNiche by mutableStateOf("Riddle")
     var topicText by mutableStateOf("")
-    var apiKey by mutableStateOf("") // Gemini API Key input
+    
+    // Multiple API Keys management
+    val savedApiKeys = mutableStateListOf<String>()
+    var selectedApiKey by mutableStateOf("")
+    var newKeyInput by mutableStateOf("")
+
     var selectedLanguage by mutableStateOf("Roman Urdu")
-    var selectedThemeName by mutableStateOf("Neon")
+    var selectedThemeName by mutableStateOf("Cinematic Room")
     
     var slides by mutableStateOf<List<SlideData>>(emptyList())
     var isGenerating by mutableStateOf(false)
@@ -29,12 +35,21 @@ class ReelViewModel : ViewModel() {
 
     val niches = listOf("Riddle", "Facts", "Motivation", "Story", "Quotes", "Quiz", "Shayari", "Horror")
     val languages = listOf("Roman Urdu", "Urdu", "Hindi", "English")
-    val themes = listOf("Neon", "Dark", "Minimal", "Book")
+    val themes = Theme.allThemes.map { it.name }
+
+    fun addApiKey(key: String) {
+        val trimmed = key.trim()
+        if (trimmed.isNotBlank() && !savedApiKeys.contains(trimmed)) {
+            savedApiKeys.add(trimmed)
+            selectedApiKey = trimmed
+            newKeyInput = ""
+        }
+    }
 
     fun generateSlides(onComplete: () -> Unit) {
         isGenerating = true
         viewModelScope.launch {
-            slides = AiGenerator.generateSlidesForTopic(selectedNiche, topicText, apiKey)
+            slides = AiGenerator.generateSlidesForTopic(selectedNiche, topicText, selectedApiKey)
             isGenerating = false
             onComplete()
         }
@@ -42,7 +57,7 @@ class ReelViewModel : ViewModel() {
 
     fun exportVideo(context: Context, onComplete: (File?) -> Unit) {
         isGenerating = true
-        exportStatus = "Rendering Video..."
+        exportStatus = "Rendering Cinematic Video..."
         viewModelScope.launch(Dispatchers.IO) {
             val renderer = VideoRenderer(context)
             val theme = Theme.fromName(selectedThemeName)
