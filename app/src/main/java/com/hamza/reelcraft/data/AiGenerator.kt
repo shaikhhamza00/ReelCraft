@@ -2,6 +2,8 @@ package com.hamza.reelcraft.data
 
 import android.content.Context
 import android.util.Log
+import com.hamza.reelcraft.model.LayerConfig
+import com.hamza.reelcraft.model.LayerType
 import com.hamza.reelcraft.model.SceneGenerator
 import com.hamza.reelcraft.model.SlideData
 import kotlinx.coroutines.Dispatchers
@@ -30,7 +32,7 @@ object AiGenerator {
                 val cleanTopic = if (topic.isBlank()) niche else topic
                 val defaultStyle = SlideData.getDefaultVoiceStyle(niche)
                 val prompt = """
-                    You are an expert viral scriptwriter for Instagram Reels and YouTube Shorts.
+                    You are an expert viral scriptwriter and cinematic visual designer for Instagram Reels and YouTube Shorts.
                     Create a highly engaging, fascinating, and deeply informative 6-slide script about the topic '$cleanTopic' in niche '$niche'.
                     For each slide, provide:
                     - 'templateType': one of 'story', 'riddle', 'quote', 'listicle'
@@ -38,9 +40,11 @@ object AiGenerator {
                     - 'body': Rich, fascinating, and detailed factual information or story related to the topic.
                     - 'voiceText': Short voiceover text (8-15 words) for TTS speech synthesis.
                     - 'voiceStyle': One of 'WHISPER_SLOW', 'ENERGETIC', 'CALM_NARRATOR', 'SUSPENSE', 'SOFT_EMOTIONAL', 'SERENE_MALE'.
+                    - 'bgMood': A mood/setting keyword (e.g., 'horror', 'motivation', 'space', 'islamic', 'shayari', 'riddle', 'sports', 'history', 'nature').
                     - 'bgScene': One of 'NIGHT_SKY', 'OCEAN', 'FIRE_EMBERS', 'CYBER_GRID', 'AURORA_BOREALIS', 'GOLDEN_SAND', 'MYSTIC_PURPLE'.
+                    - 'sceneSpec': A JSON object with 'layers' (array of objects with 'type' from [GRADIENT_SKY, STARS, MOON_OR_SUN, CLOUDS, WAVES, MOUNTAINS_OR_DUNES, CITY_SILHOUETTE, TREES_FOREST, RAIN_OR_SNOW, EMBERS_OR_SPARKS, BOKEH, GRID_OR_LINES, LIGHT_RAYS, FOG, SHAPES, MOSQUE_SILHOUETTE, SPACE_NEBULA, AURORA, BLOBS_GRADIENT], 'parallaxSpeed' [0.1 to 2.0], 'param1' [10 to 50]).
                     - 'accentColor': A vibrant hex color code (e.g. '#22D3EE', '#FF4D8D', '#FACC15').
-                    Return ONLY a valid JSON array of 6 objects with keys: 'templateType', 'headline', 'body', 'voiceText', 'voiceStyle', 'bgScene', 'accentColor'. No markdown, pure JSON array.
+                    Return ONLY a valid JSON array of 6 objects with these keys. No markdown, pure JSON array.
                 """.trimIndent()
 
                 val url = URL("https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=$apiKey")
@@ -81,12 +85,34 @@ object AiGenerator {
                     val jsonArray = JSONArray(textOutput)
                     val slides = mutableListOf<SlideData>()
                     for (i in 0 until jsonArray.length()) {
-                        val obj = jsonArray.getJSONObject(i)
+                        val obj = jsonArray.optJSONObject(i) ?: continue
                         val bodyText = obj.optString("body", "Body content")
                         val vText = obj.optString("voiceText", bodyText.take(80))
+                        val bgMood = obj.optString("bgMood", niche)
 
-                        // Step 2: Ensure unique preset compared to last 3 recent presets
-                        val uniqueScene = SceneGenerator.pickUniquePreset(recentPresets, projectSeed + i)
+                        // Parser validation: parse custom layers if valid, ignore unknown, clamp params
+                        val sceneSpecJson = obj.optJSONObject("sceneSpec")
+                        val validLayers = mutableListOf<LayerConfig>()
+                        if (sceneSpecJson != null) {
+                            val jsonLayers = sceneSpecJson.optJSONArray("layers")
+                            if (jsonLayers != null) {
+                                for (j in 0 until jsonLayers.length()) {
+                                    val layerObj = jsonLayers.optJSONObject(j) ?: continue
+                                    val typeStr = layerObj.optString("type", "")
+                                    try {
+                                        val layerType = LayerType.valueOf(typeStr.uppercase())
+                                        val parallax = layerObj.optDouble("parallaxSpeed", 1.0).toFloat().coerceIn(0.1f, 2.0f)
+                                        val p1 = layerObj.optDouble("param1", 20.0).toFloat().coerceIn(5f, 60f)
+                                        validLayers.add(LayerConfig(layerType, parallaxSpeed = parallax, param1 = p1))
+                                    } catch (e: Exception) {
+                                        // Ignore unknown layer types safely (zero crash)
+                                    }
+                                }
+                            }
+                        }
+
+                        // If less than 2 valid layers provided by Gemini, use unique contextual preset
+                        val uniqueScene = if (validLayers.size >= 2) bgMood else SceneGenerator.pickUniquePreset(recentPresets, projectSeed + i)
                         securePrefs.addRecentPresetId(uniqueScene)
 
                         slides.add(
