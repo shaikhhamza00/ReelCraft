@@ -52,7 +52,8 @@ class MainActivity : ComponentActivity() {
                             CreateScreen(
                                 viewModel = viewModel,
                                 onBack = { navController.popBackStack() },
-                                onNavigatePreview = { navController.navigate("preview") }
+                                onNavigatePreview = { navController.navigate("preview") },
+                                onNavigateSettings = { navController.navigate("settings") }
                             )
                         }
                         composable("preview") {

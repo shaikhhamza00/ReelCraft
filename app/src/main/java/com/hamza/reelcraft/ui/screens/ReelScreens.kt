@@ -6,6 +6,7 @@ import android.widget.VideoView
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.grid.GridCells
@@ -13,13 +14,17 @@ import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.MenuBook
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -29,6 +34,7 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
+import com.hamza.reelcraft.model.Theme
 import com.hamza.reelcraft.ui.ReelViewModel
 import com.hamza.reelcraft.ui.components.*
 import com.hamza.reelcraft.ui.theme.*
@@ -141,7 +147,7 @@ fun HomeScreen(
         SectionHeader(title = "Select a Niche")
         Spacer(modifier = Modifier.height(6.dp))
 
-        // Niche Grid (2 columns) with distinct subtle gradient tints
+        // Niche Grid (2 columns)
         LazyVerticalGrid(
             columns = GridCells.Fixed(2),
             modifier = Modifier
@@ -178,7 +184,7 @@ fun EnhancedNicheCard(
     isSelected: Boolean,
     onClick: () -> Unit
 ) {
-    val (icon, tintColor, bgBrush) = getNicheStyle(title)
+    val (icon, tintColor) = getNicheStyle(title)
     val borderModifier = if (isSelected) {
         Modifier.border(2.dp, Brush.linearGradient(ReelGradientPrimary), RoundedCornerShape(16.dp))
     } else {
@@ -197,7 +203,6 @@ fun EnhancedNicheCard(
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .background(bgBrush)
                 .then(borderModifier)
                 .padding(14.dp),
             contentAlignment = Alignment.CenterStart
@@ -232,17 +237,17 @@ fun EnhancedNicheCard(
     }
 }
 
-fun getNicheStyle(niche: String): Triple<ImageVector, Color, Brush> {
+fun getNicheStyle(niche: String): Pair<ImageVector, Color> {
     return when (niche.lowercase()) {
-        "riddle" -> Triple(Icons.Default.Extension, Color(0xFF22D3EE), Brush.linearGradient(listOf(ReelSurface, ReelSurfaceVariant)))
-        "facts" -> Triple(Icons.Default.Lightbulb, Color(0xFFFACC15), Brush.linearGradient(listOf(ReelSurface, ReelSurfaceVariant)))
-        "motivation" -> Triple(Icons.Default.Bolt, Color(0xFFFF4D8D), Brush.linearGradient(listOf(ReelSurface, ReelSurfaceVariant)))
-        "story" -> Triple(Icons.Default.MenuBook, Color(0xFF7C4DFF), Brush.linearGradient(listOf(ReelSurface, ReelSurfaceVariant)))
-        "quotes" -> Triple(Icons.Default.FormatQuote, Color(0xFF38BDF8), Brush.linearGradient(listOf(ReelSurface, ReelSurfaceVariant)))
-        "quiz" -> Triple(Icons.Default.Quiz, Color(0xFF34D399), Brush.linearGradient(listOf(ReelSurface, ReelSurfaceVariant)))
-        "shayari" -> Triple(Icons.Default.Edit, Color(0xFFF472B6), Brush.linearGradient(listOf(ReelSurface, ReelSurfaceVariant)))
-        "horror" -> Triple(Icons.Default.Nightlight, Color(0xFFA78BFA), Brush.linearGradient(listOf(ReelSurface, ReelSurfaceVariant)))
-        else -> Triple(Icons.Default.Movie, Color(0xFF22D3EE), Brush.linearGradient(listOf(ReelSurface, ReelSurfaceVariant)))
+        "riddle" -> Pair(Icons.Default.Extension, Color(0xFF22D3EE))
+        "facts" -> Pair(Icons.Default.Lightbulb, Color(0xFFFACC15))
+        "motivation" -> Pair(Icons.Default.Bolt, Color(0xFFFF4D8D))
+        "story" -> Pair(Icons.AutoMirrored.Filled.MenuBook, Color(0xFF7C4DFF))
+        "quotes" -> Pair(Icons.Default.FormatQuote, Color(0xFF38BDF8))
+        "quiz" -> Pair(Icons.Default.Quiz, Color(0xFF34D399))
+        "shayari" -> Pair(Icons.Default.Edit, Color(0xFFF472B6))
+        "horror" -> Pair(Icons.Default.Nightlight, Color(0xFFA78BFA))
+        else -> Pair(Icons.Default.Movie, Color(0xFF22D3EE))
     }
 }
 
@@ -334,9 +339,22 @@ fun SettingsScreen(viewModel: ReelViewModel, onBack: () -> Unit) {
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun CreateScreen(viewModel: ReelViewModel, onBack: () -> Unit, onNavigatePreview: () -> Unit) {
+fun CreateScreen(
+    viewModel: ReelViewModel,
+    onBack: () -> Unit,
+    onNavigatePreview: () -> Unit,
+    onNavigateSettings: () -> Unit
+) {
+    val surpriseTopics = listOf(
+        "99% log yeh riddle solve nahi kar paate",
+        "Secrets of the Ancient Pyramids",
+        "The Untold Story of Lahore",
+        "Why do we procrastinate and how to stop",
+        "Top 3 Habits of Millionaires",
+        "The Haunted Mansion Mystery"
+    )
+
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -346,16 +364,86 @@ fun CreateScreen(viewModel: ReelViewModel, onBack: () -> Unit, onNavigatePreview
 
         Column(
             modifier = Modifier
-                .fillMaxSize()
+                .weight(1f)
+                .verticalScroll(rememberScrollState())
                 .padding(horizontal = 20.dp)
         ) {
-            Spacer(modifier = Modifier.height(8.dp))
+            Spacer(modifier = Modifier.height(4.dp))
+
+            // Selected Niche Badge
+            Surface(
+                shape = RoundedCornerShape(20.dp),
+                color = ReelPrimaryViolet.copy(alpha = 0.2f),
+                modifier = Modifier.align(Alignment.Start)
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Tag,
+                        contentDescription = null,
+                        tint = ReelPrimaryPink,
+                        modifier = Modifier.size(14.dp)
+                    )
+                    Text(
+                        text = "Niche: ${viewModel.selectedNiche}",
+                        style = MaterialTheme.typography.labelLarge,
+                        color = ReelPrimaryPink,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            // API Key Warning Banner if missing
+            if (viewModel.savedApiKeys.isEmpty()) {
+                Surface(
+                    shape = RoundedCornerShape(16.dp),
+                    color = ReelSurfaceVariant,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Row(
+                        modifier = Modifier.padding(16.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(12.dp),
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.VpnKey,
+                                contentDescription = null,
+                                tint = Color(0xFFFACC15)
+                            )
+                            Text(
+                                text = "API key add karein for live AI generation",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = ReelTextPrimary
+                            )
+                        }
+                        TextButton(onClick = onNavigateSettings) {
+                            Text(text = "Settings", color = ReelSecondaryCyan, fontWeight = FontWeight.Bold)
+                        }
+                    }
+                }
+                Spacer(modifier = Modifier.height(16.dp))
+            }
+
+            // Topic Input
             OutlinedTextField(
                 value = viewModel.topicText,
                 onValueChange = { viewModel.topicText = it },
-                label = { Text("Topic or Question (e.g. History of Lahore)") },
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(16.dp),
+                label = { Text("What's your reel about?") },
+                placeholder = { Text("e.g. History of Lahore, Brain teaser riddle...") },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(130.dp),
+                shape = RoundedCornerShape(20.dp),
                 colors = OutlinedTextFieldDefaults.colors(
                     focusedBorderColor = ReelPrimaryViolet,
                     unfocusedBorderColor = ReelSurfaceVariant,
@@ -365,11 +453,43 @@ fun CreateScreen(viewModel: ReelViewModel, onBack: () -> Unit, onNavigatePreview
                     unfocusedTextColor = ReelTextPrimary
                 )
             )
-            Spacer(modifier = Modifier.height(20.dp))
 
+            // Surprise me button
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.End
+            ) {
+                TextButton(
+                    onClick = {
+                        viewModel.topicText = surpriseTopics.random()
+                    }
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.AutoAwesome,
+                        contentDescription = null,
+                        tint = ReelSecondaryCyan,
+                        modifier = Modifier.size(16.dp)
+                    )
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text(
+                        text = "Surprise me ✨",
+                        color = ReelSecondaryCyan,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            // Language Selector (Horizontal Scrollable Row of SelectableChips)
             SectionHeader(title = "Language")
             Spacer(modifier = Modifier.height(8.dp))
-            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
                 viewModel.languages.forEach { lang ->
                     SelectableChip(
                         text = lang,
@@ -378,45 +498,119 @@ fun CreateScreen(viewModel: ReelViewModel, onBack: () -> Unit, onNavigatePreview
                     )
                 }
             }
+
             Spacer(modifier = Modifier.height(20.dp))
 
-            SectionHeader(title = "Cinematic Vibe")
+            // Vibe / Theme Visual Thumbnail Picker (Horizontal Scroll)
+            SectionHeader(title = "Cinematic Vibe & Template")
             Spacer(modifier = Modifier.height(8.dp))
-            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                viewModel.themes.take(4).forEach { th ->
-                    SelectableChip(
-                        text = th,
-                        isSelected = viewModel.selectedThemeName == th,
-                        onClick = { viewModel.selectedThemeName = th }
-                    )
-                }
-            }
-            Spacer(modifier = Modifier.height(8.dp))
-            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                viewModel.themes.drop(4).forEach { th ->
-                    SelectableChip(
-                        text = th,
-                        isSelected = viewModel.selectedThemeName == th,
-                        onClick = { viewModel.selectedThemeName = th }
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Theme.allThemes.forEach { th ->
+                    val isSelected = viewModel.selectedThemeName == th.name
+                    ThemeThumbnailCard(
+                        themeName = th.name,
+                        bgColorHex = th.backgroundColorHex,
+                        accentColorHex = th.accentColorHex,
+                        isSelected = isSelected,
+                        onClick = { viewModel.selectedThemeName = th.name }
                     )
                 }
             }
 
-            Spacer(modifier = Modifier.weight(1f))
+            Spacer(modifier = Modifier.height(32.dp))
+        }
 
-            GradientButton(
-                text = "Generate Slides",
-                isLoading = viewModel.isGenerating,
-                onClick = {
-                    viewModel.generateSlides {
-                        onNavigatePreview()
-                    }
-                }
-            )
-            Spacer(modifier = Modifier.height(24.dp))
+        // Sticky Bottom Generate Button
+        Surface(
+            modifier = Modifier.fillMaxWidth(),
+            color = ReelSurface,
+            shadowElevation = 8.dp,
+            shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp)
+        ) {
+            Box(modifier = Modifier.padding(20.dp)) {
+                val isTopicValid = viewModel.topicText.isNotBlank()
+                GradientButton(
+                    text = "Generate Reel",
+                    isLoading = viewModel.isGenerating,
+                    enabled = isTopicValid,
+                    onClick = {
+                        viewModel.generateSlides {
+                            onNavigatePreview()
+                        }
+                    },
+                    modifier = Modifier.alpha(if (isTopicValid) 1f else 0.5f)
+                )
+            }
         }
     }
 }
+
+@Composable
+fun ThemeThumbnailCard(
+    themeName: String,
+    bgColorHex: String,
+    accentColorHex: String,
+    isSelected: Boolean,
+    onClick: () -> Unit
+) {
+    val bgParsedColor = try { Color(android.graphics.Color.parseColor(bgColorHex)) } catch (e: Exception) { ReelSurface }
+
+    val borderMod = if (isSelected) {
+        Modifier.border(2.5.dp, Brush.linearGradient(ReelGradientPrimary), RoundedCornerShape(16.dp))
+    } else {
+        Modifier.border(1.dp, ReelSurfaceVariant, RoundedCornerShape(16.dp))
+    }
+
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        modifier = Modifier
+            .width(85.dp)
+            .clip(RoundedCornerShape(16.dp))
+            .clickable(onClick = onClick)
+    ) {
+        Box(
+            modifier = Modifier
+                .width(85.dp)
+                .height(130.dp) // 9:16 aspect ratio thumbnail shape
+                .clip(RoundedCornerShape(16.dp))
+                .background(bgParsedColor)
+                .then(borderMod)
+                .padding(8.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(24.dp)
+                    .clip(RoundedCornerShape(6.dp))
+                    .background(accentColorHex.toColor())
+            )
+        }
+        Spacer(modifier = Modifier.height(6.dp))
+        Text(
+            text = themeName,
+            style = MaterialTheme.typography.labelLarge,
+            fontSize = 12.sp,
+            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+            color = if (isSelected) ReelPrimaryPink else ReelTextSecondary,
+            maxLines = 1
+        )
+    }
+}
+
+fun String.toColorType(): Color {
+    return try {
+        Color(android.graphics.Color.parseColor(this))
+    } catch (e: Exception) {
+        Color.White
+    }
+}
+
+fun String.toColor(): Color = toColorType()
 
 @Composable
 fun PreviewScreen(viewModel: ReelViewModel, onBack: () -> Unit, onNavigateExport: () -> Unit) {
