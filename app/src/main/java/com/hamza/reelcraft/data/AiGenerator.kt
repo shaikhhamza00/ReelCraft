@@ -31,37 +31,52 @@ object AiGenerator {
                 try {
                     val cleanTopic = if (topic.isBlank()) niche else topic
                     val defaultStyle = SlideData.getDefaultVoiceStyle(niche)
+                    val targetSlideCount = when (niche.lowercase()) {
+                        "riddle", "quiz", "facts" -> 5
+                        "motivation" -> 6
+                        "shayari", "quotes" -> 4
+                        else -> 6 // Horror/Story 6-7
+                    }
+
                     val prompt = """
                         Tum ek mahir short-video scriptwriter ho jo Urdu/Roman Urdu/Hindi mein viral Reels likhta hai. Tumhara kaam 25-40 second ki voiceover script likhna hai jo viewer ko pehle 3 second mein pakar le aur aakhir tak rokay rakhe. Topic: '$cleanTopic' in niche '$niche'.
 
-                        DO-PASS GENERATION INSTRUCTION:
-                        Pass 1: Draft the initial high-tension viral script.
-                        Pass 2 (Self-Critique & Refine): Read your draft from a Reels viewer's perspective. Are any slides dry, generic, or too long? Make them punchier, faster, and tenser. Ensure the hook is absolute killer. Output ONLY the final refined JSON.
+                        SLIDE COUNT RULE: Is niche ke liye exact $targetSlideCount slides honi chahiyein.
 
-                        STRUCTURE (6-8 slides):
+                        STRUCTURE:
                         1. HOOK (slide 1): 3 second se kam. Seedha ajeeb, khofnaak, hairan karne wali ya sawaliya baat. Taaruf nahi. 'Aaj hum...' ya 'Dosto...' se shuru karna mana hai.
                         2. SETUP (1-2 slides): maahol aur kirdar, ek khaas tafseel ke saath (waqt, jagah, awaaz, chiz).
                         3. ESCALATION (2-3 slides): har slide pichli se zyada tension ya hairat. Har slide ka aakhir ek adhoora sawal ya moor ho.
                         4. TWIST/PAYOFF (1 slide): ghair mutawaqqe, yaad rehne wali baat.
                         5. LOOP/CLIFFHANGER (aakhri slide): aisa khatma jo pehli slide se jur jaye ya Part 2 ki khwahish chhor de.
 
-                        STYLE KE QAIDE:
+                        STYLE KE QAIDE & BANNED LIST:
+                        - Misaal ko copy ya dohrana sakht mana hai. Har dafa naya kirdar, naya waqt, naya twist, naya manzar.
                         - Har slide ka voiceText 8-15 lafz. Chhote jumlay. Bolchal ki zubaan, kitabi nahi. Jaise dost ko raaz bata rahe ho.
-                        - Khaas tafseel use karo: naam, adad, waqt, jagah, awaaz, bu, ehsaas. 'Ek din kuch hua' jaisa aam jumla mana hai.
-                        - Mana hai: 'aaj hum dekhenge', 'dosto', 'is kahani se humein yeh sabaq milta hai', moral lecture, cliche filler, hashiya, aur 'ajeeb', 'dilchasp' jaise khokhle lafz.
-                        - Zubaan: jo language user ne chuni, usi mein. Roman Urdu ho to roz marra bolchal wali, ghalat ya ajeeb hijje nahi.
-                        - Har slide ka ek 'emphasisWords' (1-2 sab se ahem lafz as an array of strings).
+                        - Khaas tafseel use karo: asli lagne wala naam, shehar, adad, kharcha, tareekh, waqt, awaaz, bu, ehsaas. 'Ek din kuch hua' jaisa aam jumla mana hai.
+                        - BANNED PHRASES & CONCEPTS: 'aaj hum', 'dosto', 'sabaq', 'zid karo', 'mehnat karo', 'haar mat maano', 'kaisa laga', 'sab se bada CEO', moral lecture, nasihat, cliche filler.
+                        - SHOW, DON'T TELL: Sabaq ya nateeja sirf kahani ke natije se khud nazar aaye, batao mat.
+                        - Riddle/Quiz rule: Hook sawal, ek hint, suspense/countdown, jawab, aur ek hairan karne wali tafseel jawab ke baare mein. Paheli aisi ho jo sach mein solve ho (ek hi sahi jawab).
+
+                        SELF-CHECK LIST (Model ko jawab dene se pehle run karni hai):
+                        (a) Kya hook 15 lafz se kam aur bina taaruf ke hai?
+                        (b) Kya har slide mein ek khaas tafseel (naam, adad, waqt, shehar) hai?
+                        (c) Kya koi moral, nasihat ya banned jumla ('zid karo', 'sabaq', 'dosto') to nahi hai?
+                        (d) Kya slide count $targetSlideCount hai?
+                        (e) Kya twist ghair mutawaqqe hai?
+                        (Agar koi sawal fail ho, toh script dobara likho).
+
+                        DO-PASS GENERATION: Pehle draft likho, phir self-critique karke mazeed tezz aur tension wali banao.
 
                         FEW-SHOT EXAMPLES (Style learning only, do not copy verbatim):
                         Example 1 (Horror):
-                        [{"templateType":"story","headline":"Raat 3 baje","body":"Raat 3 baje ammi ne mujhe awaaz di. Masla yeh tha... ammi ko guzre 2 saal ho chuke the.","voiceText":"Raat 3 baje ammi ne mujhe awaaz di.","voiceStyle":"WHISPER_SLOW","bgMood":"horror","bgScene":"NIGHT_SKY","emphasisWords":["raat 3 baje","ammi"],"accentColor":"#FF4D8D"},
-                        {"templateType":"story","headline":"Khamoshi","body":"Main ne razai munh par kheench li. Awaaz phir aayi... bilkul darwaze ke peechay se.","voiceText":"Awaaz phir aayi darwaze ke peechay se.","voiceStyle":"WHISPER_SLOW","bgMood":"horror","bgScene":"NIGHT_SKY","emphasisWords":["razai","peechay"],"accentColor":"#FF4D8D"}]
+                        [{"templateType":"story","headline":"Ghar number 42","body":"Lahore ke Gulshan block mein ghar number 42 par tala pichle 10 saal se laga tha.","voiceText":"Lahore ke ghar number 42 par 10 saal se tala tha.","voiceStyle":"WHISPER_SLOW","bgMood":"horror","bgScene":"NIGHT_SKY","emphasisWords":["lahore","10 saal"],"accentColor":"#FF4D8D"},
+                        {"templateType":"story","headline":"Awaaz","body":"Raat ke 2:15 par andar se ghanti bajne ki awaaz aayi.","voiceText":"Raat 2:15 par andar se ghanti ki awaaz aayi.","voiceStyle":"WHISPER_SLOW","bgMood":"horror","bgScene":"NIGHT_SKY","emphasisWords":["raat 2:15","ghanti"],"accentColor":"#FF4D8D"}]
 
                         Example 2 (Riddle):
-                        [{"templateType":"riddle","headline":"Dunya ki aisi cheez","body":"Dunya ki aisi kaun si cheez hai jo paida hote hi udne lagti hai? Bina paron ke.","voiceText":"Paida hote hi udne lagti hai bina paron ke.","voiceStyle":"SUSPENSE","bgMood":"riddle","bgScene":"CYBER_GRID","emphasisWords":["udne lagti hai"],"accentColor":"#22D3EE"},
-                        {"templateType":"riddle","headline":"Sochiye","body":"99% log pehli koshish mein haar maan lete hain. Waqt khatam ho raha hai.","voiceText":"99% log haar maan lete hain.","voiceStyle":"SUSPENSE","bgMood":"riddle","bgScene":"CYBER_GRID","emphasisWords":["99% log"],"accentColor":"#22D3EE"}]
+                        [{"templateType":"riddle","headline":"Ajeeb cheez","body":"Aisi kaun si cheez hai jo zameen par chale toh pani peeti hai, aur agar pani pi le toh mar jati hai?","voiceText":"Zameen par chale toh pani peeti hai, pani peete hi mar jati hai.","voiceStyle":"SUSPENSE","bgMood":"riddle","bgScene":"CYBER_GRID","emphasisWords":["pani peeti hai","mar jati hai"],"accentColor":"#22D3EE"}]
 
-                        Return ONLY a valid JSON array of 6 to 8 objects with keys: 'templateType', 'headline', 'body', 'voiceText', 'voiceStyle', 'bgMood', 'bgScene', 'emphasisWords', 'accentColor'. No markdown, pure JSON array.
+                        Return ONLY a valid JSON array of exactly $targetSlideCount objects with keys: 'templateType', 'headline', 'body', 'voiceText', 'voiceStyle', 'bgMood', 'bgScene', 'emphasisWords', 'accentColor'. No markdown, pure JSON array.
                     """.trimIndent()
 
                     val url = URL("https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=$apiKey")
@@ -124,8 +139,8 @@ object AiGenerator {
                             )
                         }
 
-                        // Step 4 Validation check
-                        if (validateAndCleanSlides(slides)) {
+                        // Step 4 Validation check (banned phrases, word counts, slide count)
+                        if (validateAndCleanSlides(slides, targetSlideCount)) {
                             return@withContext slides
                         }
                     } else {
@@ -140,12 +155,19 @@ object AiGenerator {
         }
     }
 
-    private fun validateAndCleanSlides(slides: List<SlideData>): Boolean {
+    private fun validateAndCleanSlides(slides: List<SlideData>, targetCount: Int): Boolean {
         if (slides.isEmpty()) return false
+        if (slides.size !in (targetCount - 1)..(targetCount + 1)) return false
+
         val firstWords = slides[0].voiceText.split(" ").filter { it.isNotBlank() }
         if (firstWords.size > 15) return false
 
-        val banned = listOf("aaj hum", "dosto", "is kahani se", "sabaq")
+        for (slide in slides) {
+            val vWords = slide.voiceText.split(" ").filter { it.isNotBlank() }
+            if (vWords.size !in 8..15) return false
+        }
+
+        val banned = listOf("aaj hum", "dosto", "sabaq", "zid karo", "mehnat karo", "haar mat maano", "kaisa laga", "sab se bada ceo", "is kahani se")
         for (slide in slides) {
             val text = (slide.voiceText + " " + slide.body).lowercase()
             for (b in banned) {
@@ -159,47 +181,52 @@ object AiGenerator {
         val securePrefs = SecurePreferences(context)
         val recentPresets = securePrefs.getRecentPresetIds()
         val projectSeed = System.currentTimeMillis()
-        val cleanTopic = if (topic.isBlank()) niche else topic
-        val defaultStyle = SlideData.getDefaultVoiceStyle(niche)
 
-        val rawSlides = when (niche.lowercase()) {
-            "horror" -> listOf(
-                SlideData("story", "Raat 3 baje", "Raat 3 baje ammi ne mujhe awaaz di. Masla yeh tha... ammi ko guzre 2 saal ho chuke the.", voiceText = "Raat 3 baje ammi ne mujhe awaaz di.", voiceStyle = "WHISPER_SLOW", accentColor = "#FF4D8D"),
-                SlideData("story", "Razai ke andar", "Main ne razai munh par kheench li. Awaaz phir aayi... bilkul darwaze ke peechay se.", voiceText = "Awaaz phir aayi darwaze ke peechay se.", voiceStyle = "WHISPER_SLOW", accentColor = "#FF4D8D"),
-                SlideData("story", "Mobile Screen", "Phir mobile bajaa. Screen par likha tha: Ammi calling.", voiceText = "Mobile screen par likha tha: Ammi calling.", voiceStyle = "SUSPENSE", accentColor = "#FF4D8D"),
-                SlideData("story", "Awaaz", "Main ne call uthayi. Dusri taraf se ammi ki awaaz aayi.", voiceText = "Dusri taraf se ammi ki awaaz aayi.", voiceStyle = "WHISPER_SLOW", accentColor = "#FF4D8D"),
-                SlideData("story", "Che चेतावनी", "'Darwaza mat kholna. Jo bahar hai, wo main nahi hoon.'", voiceText = "'Darwaza mat kholna, wo main nahi hoon.'", voiceStyle = "WHISPER_SLOW", accentColor = "#FF4D8D"),
-                SlideData("story", "Dastak", "Aur phir... achanak darwaze par zor se dastak hui.", voiceText = "Aur phir darwaze par dastak hui.", voiceStyle = "WHISPER_SLOW", accentColor = "#FF4D8D")
+        val rawSlides = when (topic.lowercase()) {
+            "bhoot wali purani haveli" -> listOf(
+                SlideData("story", "Haveli ka darwaza", "Karachi ke cantonment area mein haveli par 1947 se tala laga tha.", voiceText = "Karachi ki is haveli par 1947 se tala tha.", voiceStyle = "WHISPER_SLOW", accentColor = "#FF4D8D"),
+                SlideData("story", "Awaaz", "Raat 1:30 baje andar se piano bajne ki awaaz aane lagi.", voiceText = "Raat dedh baje andar se piano bajne laga.", voiceStyle = "WHISPER_SLOW", accentColor = "#FF4D8D"),
+                SlideData("story", "Chaukidar", "Chaukidar ne jhaank kar dekha toh piano khud ba khud chal raha tha.", voiceText = "Chaukidar ne dekha piano khud chal raha tha.", voiceStyle = "WHISPER_SLOW", accentColor = "#FF4D8D"),
+                SlideData("story", "Pehchan", "Jaise hi us ne torch maari, piano par kisi ki kati hui ungliyan rakhi theen.", voiceText = "Torch ki roshni mein piano par kati ungliyan theen.", voiceStyle = "SUSPENSE", accentColor = "#FF4D8D"),
+                SlideData("story", "Twist", "Aur tab chaukidar ke kandhe par kisi ne thandi ungliyon se touch kiya.", voiceText = "Tab chaukidar ke kandhe par kisi ne touch kiya.", voiceStyle = "WHISPER_SLOW", accentColor = "#FF4D8D"),
+                SlideData("story", "Anjaam", "Subah chaukidar ki laash usi piano ke andar milti hui payi gayi.", voiceText = "Subah chaukidar ki laash piano ke andar mili.", voiceStyle = "WHISPER_SLOW", accentColor = "#FF4D8D")
             )
-            "motivation" -> listOf(
-                SlideData("quote", "50 rupay jeb mein", "50 rupay jeb mein aur ek purani cycle lekar us ne shehar chhoda tha.", voiceText = "Pachas rupay aur ek purani cycle.", voiceStyle = "ENERGETIC", accentColor = "#F59E0B"),
-                SlideData("story", "Raatein", "Pehle 3 saal roz bhooke sona pada, logon ne taanay diye.", voiceText = "Pehle 3 saal roz bhooke sona pada.", voiceStyle = "CALM_NARRATOR", accentColor = "#F59E0B"),
-                SlideData("listicle", "Turning Point", "Lekin us ne ek aadat nahi chhodi: roz subah 4 baje uthkar mehnat karna.", voiceText = "Roz subah chaar baje uthkar mehnat.", voiceStyle = "ENERGETIC", accentColor = "#F59E0B"),
-                SlideData("quote", "Asli Sach", "Kamyabi kisi ki mohtaj nahi hoti, bas zid aur consistency chahiye.", voiceText = "Kamyabi ko zid aur consistency chahiye.", voiceStyle = "ENERGETIC", accentColor = "#F59E0B"),
-                SlideData("quote", "Aaj", "Aaj wo usi shehar ka sab se bada CEO hai. Zid karo, haar mat maano.", voiceText = "Aaj wo usi shehar ka sab se bada CEO hai.", voiceStyle = "ENERGETIC", accentColor = "#F59E0B")
+            "rickshaw chalane wala jo doctor bana" -> listOf(
+                SlideData("story", "Safar", "Lahore ki sard raat mein 45 saal ka Aslam rickshaw chala raha tha.", voiceText = "Lahore ki sard raat mein Aslam rickshaw chala raha tha.", voiceStyle = "ENERGETIC", accentColor = "#F59E0B"),
+                SlideData("story", "Kitab", "Sari raat sawari ka intezar karte waqt wo seat ke niche se biology ki kitab nikalta.", voiceText = "Sawari ke intezar mein wo biology ki kitab padhta.", voiceStyle = "CALM_NARRATOR", accentColor = "#F59E0B"),
+                SlideData("story", "Mehnat", "Din mein 10 ghante pedling, raat ko hospital ki emergency mein duty aur padhai.", voiceText = "Din mein pedal aur raat ko hospital duty.", voiceStyle = "ENERGETIC", accentColor = "#F59E0B"),
+                SlideData("story", "Nateeja", "Saal 2023 mein Aslam ne MBBS ka imtihaan 3.8 GPA se pass kar liya.",voiceText = "Saal 2023 mein Aslam ne MBBS pass kar liya.", voiceStyle = "ENERGETIC", accentColor = "#F59E0B"),
+                SlideData("story", "Asli Jeet", "Aaj wo Jinnah hospital ke surgical ward mein junior doctor hai.", voiceText = "Aaj wo Jinnah hospital mein junior doctor hai.", voiceStyle = "ENERGETIC", accentColor = "#F59E0B")
             )
-            "riddle" -> listOf(
-                SlideData("riddle", "Ajeeb sawal", "Dunya ki aisi kaun si cheez hai jo paida hote hi udne lagti hai? Bina paron ke.", voiceText = "Paida hote hi udne lagti hai bina paron ke.", voiceStyle = "SUSPENSE", accentColor = "#22D3EE"),
-                SlideData("story", "Sochiye", "99% log pehli koshish mein haar maan lete hain. Kya aapko pata hai?", voiceText = "99% log pehli koshish mein haar maan gaye.", voiceStyle = "SUSPENSE", accentColor = "#22D3EE"),
-                SlideData("quote", "Jawab", "Sahi jawab hai... dhuan! Kaisa laga?", voiceText = "Sahi jawab hai dhuan!", voiceStyle = "SUSPENSE", accentColor = "#22D3EE")
+            "aisi cheez jo jitni dhoyo utni gandi hoti hai" -> listOf(
+                SlideData("riddle", "Paheli", "Aisi kaun si cheez hai jo jitni zyada dhoyi jaye utni hi gandi hoti hai?", voiceText = "Jitni zyada dhoyi jaye utni hi gandi hoti hai.", voiceStyle = "SUSPENSE", accentColor = "#22D3EE"),
+                SlideData("riddle", "Hint", "Iska taluq paani aur sabun se hai, lekin yeh kapda nahi hai.", voiceText = "Iska taluq paani aur sabun se hai.", voiceStyle = "SUSPENSE", accentColor = "#22D3EE"),
+                SlideData("riddle", "Countdown", "Sochiye, 3 seconds hain aapke paas. 3, 2, 1.", voiceText = "Sochiye, teen seconds hain aapke paas.", voiceStyle = "SUSPENSE", accentColor = "#22D3EE"),
+                SlideData("riddle", "Jawab", "Sahi jawab hai... paani! Kyunki paani khud dusri cheezon ko saaf karta hai.", voiceText = "Sahi jawab hai paani, kyunki yeh saaf karta hai.", voiceStyle = "SUSPENSE", accentColor = "#22D3EE"),
+                SlideData("riddle", "Fact", "Paani hi dunya ka sab se bara universal solvent hai.", voiceText = "Paani dunya ka sab se bara universal solvent hai.", voiceStyle = "SUSPENSE", accentColor = "#22D3EE")
             )
-            "space fact" -> listOf(
-                SlideData("story", "Black Hole", "Agar aap ek black hole ke paas gaye, toh aapka waqt ruk jayega.", voiceText = "Black hole ke paas waqt ruk jata hai.", voiceStyle = "SERENE_MALE", accentColor = "#38BDF8"),
-                SlideData("story", "Gravity", "Wahan gravity itni taqatwar hai ke roshni bhi nahi bach pati.", voiceText = "Roshni bhi black hole se nahi bach pati.", voiceStyle = "SERENE_MALE", accentColor = "#38BDF8"),
-                SlideData("quote", "Cosmos", "Dunya se baahar ek aisi dunya hai jo humari soch se bhi pare hai.", voiceText = "Dunya se baahar ek alag dunya hai.", voiceStyle = "SERENE_MALE", accentColor = "#38BDF8")
+            "insaan ke dil ke baare mein hairan kar dene wali haqiqat" -> listOf(
+                SlideData("facts", "Dil ki taqat", "Aapka dil ek din mein itni energy paida karta hai jo truck ko 32 kilometer chala de.", voiceText = "Aapka dil ek din mein truck chala sakta hai.", voiceStyle = "SERENE_MALE", accentColor = "#38BDF8"),
+                SlideData("facts", "Dhadkan", "Jab aap kisi se pyaar karte hain, toh aap dono ke dil ki dhadkan sync ho jati hai.", voiceText = "Pyaar karne par dil ki dhadkan sync ho jati hai.", voiceStyle = "SERENE_MALE", accentColor = "#38BDF8"),
+                SlideData("facts", "Pump", "Zindagi ke 70 saal mein dil 2.5 billion baar dhadakta hai bina ek second ruke.", voiceText = "Zindagi mein dil 2.5 billion baar dhadakta hai.", voiceStyle = "SERENE_MALE", accentColor = "#38BDF8"),
+                SlideData("facts", "Cells", "Dil ke cells kabhi divide nahi hote, isliye dil ke cancer ke mamle na-ke-barabar hain.", voiceText = "Dil ke cells kabhi divide nahi hote hain.", voiceStyle = "SERENE_MALE", accentColor = "#38BDF8"),
+                SlideData("facts", "Conclusion", "Jism ka yeh chhota sa pump poori kainaat chala raha hai.", voiceText = "Jism ka yeh chhota sa pump kainaat chala raha hai.", voiceStyle = "SERENE_MALE", accentColor = "#38BDF8")
             )
-            "shayari" -> listOf(
-                SlideData("quote", "Tanhai", "Woh jo hum se rooth ke baithe hain, shayad unhein humari yaad nahi aati.", voiceText = "Woh jo hum se rooth ke baithe hain.", voiceStyle = "SOFT_EMOTIONAL", accentColor = "#E879F9"),
-                SlideData("quote", "Aankhein", "Aankhon mein nami hai aur dil mein bas ek hi faryad hai.", voiceText = "Aankhon mein nami aur dil mein faryad.", voiceStyle = "SOFT_EMOTIONAL", accentColor = "#E879F9")
+            "barish ki raat ka intezar" -> listOf(
+                SlideData("quote", "Bheegi raat", "Khidki ke paas baith kar tumhara intezar kar raha hoon.", voiceText = "Khidki ke paas baith kar intezar hai.", voiceStyle = "SOFT_EMOTIONAL", accentColor = "#E879F9"),
+                SlideData("quote", "Boonda baandi", "Barish ki har boond par bas tumhara hi naam likha hai.", voiceText = "Barish ki har boond par tumhara naam hai.", voiceStyle = "SOFT_EMOTIONAL", accentColor = "#E879F9"),
+                SlideData("quote", "Hawao", "Hawayen bhi keh rahi hain ke tum jaldi laut kar aaoge.", voiceText = "Hawayen keh rahi hain tum laut kar aaoge.", voiceStyle = "SOFT_EMOTIONAL", accentColor = "#E879F9"),
+                SlideData("quote", "Aakhri umeed", "Yeh raat lambi sahi, magar subah tumhare sath hogi.", voiceText = "Yeh raat lambi sahi, subah tumhare sath hogi.", voiceStyle = "SOFT_EMOTIONAL", accentColor = "#E879F9")
             )
-            "islamic quote" -> listOf(
-                SlideData("quote", "Sabr", "Jab sab kuch bikhar jaye, toh yaad rakho Allah sabar karne walon ke sath hai.", voiceText = "Allah sabar karne walon ke sath hai.", voiceStyle = "CALM_NARRATOR", accentColor = "#34D399"),
-                SlideData("quote", "Umeed", "Namaz dil ka sukoon hai. Har mushkil ke baad aasaani hai.", voiceText = "Har mushkil ke baad aasaani hai.", voiceStyle = "CALM_NARRATOR", accentColor = "#34D399")
+            "hazrat ali (ra) ka ek waqia" -> listOf(
+                SlideData("quote", "Insaaf", "Hazrat Ali (RA) ke paas ek yahudi aur ek musalman insaaf ke liye aaye.", voiceText = "Hazrat Ali ke paas insaaf ke liye do log aaye.", voiceStyle = "CALM_NARRATOR", accentColor = "#34D399"),
+                SlideData("quote", "Faisla", "Aap (RA) ne bina kisi farq ke sach ka sath diya aur haqdar ko uska haq diya.", voiceText = "Aap ne bina kisi farq ke sach ka sath diya.", voiceStyle = "CALM_NARRATOR", accentColor = "#34D399"),
+                SlideData("quote", "Sabaq", "Insaaf sirf apnon ke liye nahi, har insaan ke liye lazmi hai.", voiceText = "Insaaf har ek insaan ke liye lazmi hai.", voiceStyle = "CALM_NARRATOR", accentColor = "#34D399")
             )
             else -> listOf(
-                SlideData("story", "Ghaflat", "Waqt kisi ke liye nahi rukta. Jab tak aap so rahe hain, koi aur jeet raha hai.", voiceText = "Waqt kisi ke liye nahi rukta.", voiceStyle = defaultStyle, accentColor = "#7C4DFF"),
-                SlideData("story", "Faisla", "Aaj ka ek chhota qadam aapka kal badal sakta hai.", voiceText = "Aaj ka ek chhota qadam kal badal dega.", voiceStyle = defaultStyle, accentColor = "#7C4DFF"),
-                SlideData("quote", "Utho", "Der mat karo, abhi shuru karo.", voiceText = "Der mat karo, abhi shuru karo.", voiceStyle = defaultStyle, accentColor = "#7C4DFF")
+                SlideData("story", "Ghaflat", "Waqt kisi ke liye nahi rukta. Jab tak aap so rahe hain, koi aur jeet raha hai.", voiceText = "Waqt kisi ke liye nahi rukta.", voiceStyle = "CALM_NARRATOR", accentColor = "#7C4DFF"),
+                SlideData("story", "Faisla", "Aaj ka ek chhota qadam aapka kal badal sakta hai.", voiceText = "Aaj ka ek chhota qadam kal badal dega.", voiceStyle = "CALM_NARRATOR", accentColor = "#7C4DFF"),
+                SlideData("quote", "Utho", "Der mat karo, abhi shuru karo.", voiceText = "Der mat karo, abhi shuru karo.", voiceStyle = "ENERGETIC", accentColor = "#7C4DFF")
             )
         }
 
