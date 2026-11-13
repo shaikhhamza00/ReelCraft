@@ -17,6 +17,7 @@ import com.hamza.reelcraft.ui.screens.CreateScreen
 import com.hamza.reelcraft.ui.screens.ExportScreen
 import com.hamza.reelcraft.ui.screens.HomeScreen
 import com.hamza.reelcraft.ui.screens.PreviewScreen
+import com.hamza.reelcraft.ui.screens.SettingsScreen
 import com.hamza.reelcraft.ui.theme.ReelCraftTheme
 
 class MainActivity : ComponentActivity() {
@@ -35,9 +36,17 @@ class MainActivity : ComponentActivity() {
                         modifier = Modifier.padding(innerPadding)
                     ) {
                         composable("home") {
-                            HomeScreen(viewModel = viewModel) {
-                                navController.navigate("create")
-                            }
+                            HomeScreen(
+                                viewModel = viewModel,
+                                onNavigateCreate = { navController.navigate("create") },
+                                onNavigateSettings = { navController.navigate("settings") }
+                            )
+                        }
+                        composable("settings") {
+                            SettingsScreen(
+                                viewModel = viewModel,
+                                onBack = { navController.popBackStack() }
+                            )
                         }
                         composable("create") {
                             CreateScreen(
