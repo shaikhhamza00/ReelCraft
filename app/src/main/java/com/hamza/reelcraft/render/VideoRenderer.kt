@@ -150,6 +150,33 @@ class VideoRenderer(private val context: Context) {
         }
         canvas.drawRoundRect(RectF(marginX.toFloat() - 20f, topBound + 20f, (WIDTH - marginX + 20).toFloat(), bottomBound - 20f), 28f, 28f, overlayPaint)
 
+        // Niche-specific border framing and UI layer styling
+        val query = (slide.body + " " + slide.headline).lowercase()
+        val isHorror = query.contains("horror") || query.contains("dar") || query.contains("bhoot")
+        val isMotivation = query.contains("motivation") || query.contains("kamyabi") || query.contains("rickshaw")
+        val isRiddle = query.contains("riddle") || query.contains("quiz") || query.contains("dhoyo")
+        val isFacts = query.contains("facts") || query.contains("dil") || query.contains("haqiqat")
+        val isShayari = query.contains("shayari") || query.contains("ishq") || query.contains("barish")
+        val isIslamic = query.contains("islamic") || query.contains("hazrat") || query.contains("sabr")
+
+        val borderColor = when {
+            isHorror -> AndroidColor.parseColor("#EF4444")
+            isMotivation -> AndroidColor.parseColor("#F59E0B")
+            isRiddle -> AndroidColor.parseColor("#22D3EE")
+            isFacts -> AndroidColor.parseColor("#38BDF8")
+            isShayari -> AndroidColor.parseColor("#E879F9")
+            isIslamic -> AndroidColor.parseColor("#34D399")
+            else -> accentColor
+        }
+
+        val borderPaint = Paint().apply {
+            color = borderColor
+            style = Paint.Style.STROKE
+            strokeWidth = 3f
+            isAntiAlias = true
+        }
+        canvas.drawRoundRect(RectF(marginX.toFloat() - 20f, topBound + 20f, (WIDTH - marginX + 20).toFloat(), bottomBound - 20f), 28f, 28f, borderPaint)
+
         // Word-by-word kinetic typography timing calculation (Step 3)
         val headlineWords = slide.headline.split(" ")
         val visibleWordCount = ((progress * headlineWords.size * 1.5f).toInt()).coerceIn(1, headlineWords.size)
