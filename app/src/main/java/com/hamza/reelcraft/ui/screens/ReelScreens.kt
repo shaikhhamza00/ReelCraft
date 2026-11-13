@@ -1,5 +1,8 @@
 package com.hamza.reelcraft.ui.screens
 
+import android.net.Uri
+import android.widget.MediaController
+import android.widget.VideoView
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.grid.GridCells
@@ -15,6 +18,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.viewinterop.AndroidView
 import com.hamza.reelcraft.ui.ReelViewModel
 
 @Composable
@@ -238,7 +242,28 @@ fun ExportScreen(viewModel: ReelViewModel, androidContext: android.content.Conte
         )
         Spacer(modifier = Modifier.height(16.dp))
         Text(text = viewModel.exportStatus)
-        Spacer(modifier = Modifier.height(24.dp))
+        Spacer(modifier = Modifier.height(16.dp))
+
+        // Video Player if video is rendered
+        viewModel.exportedVideoFile?.let { videoFile ->
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(350.dp)
+                    .padding(bottom = 16.dp)
+            ) {
+                AndroidView(
+                    factory = { ctx ->
+                        VideoView(ctx).apply {
+                            setVideoURI(Uri.fromFile(videoFile))
+                            setMediaController(MediaController(ctx))
+                            start()
+                        }
+                    },
+                    modifier = Modifier.fillMaxSize()
+                )
+            }
+        }
 
         if (viewModel.isGenerating) {
             CircularProgressIndicator()
@@ -251,7 +276,7 @@ fun ExportScreen(viewModel: ReelViewModel, androidContext: android.content.Conte
                 },
                 modifier = Modifier.fillMaxWidth()
             ) {
-                Text(text = "Render & Save to Gallery")
+                Text(text = if (viewModel.exportedVideoFile == null) "Render & Save to Gallery" else "Re-render Video")
             }
         }
     }
