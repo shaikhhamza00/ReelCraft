@@ -3,6 +3,8 @@ package com.hamza.reelcraft.ui.screens
 import android.net.Uri
 import android.widget.MediaController
 import android.widget.VideoView
+import android.widget.Toast
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -15,6 +17,7 @@ import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -29,8 +32,10 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
@@ -615,77 +620,138 @@ fun String.toColor(): Color = toColorType()
 @Composable
 fun PreviewScreen(viewModel: ReelViewModel, onBack: () -> Unit, onNavigateExport: () -> Unit) {
     val pagerState = rememberPagerState(pageCount = { viewModel.slides.size })
+    val context = LocalContext.current
 
     Column(
         modifier = Modifier
             .fillMaxSize()
             .background(ReelBackground)
     ) {
-        ReelTopBar(title = "Preview Slides (${viewModel.slides.size})", onBack = onBack)
+        ReelTopBar(title = "Preview", onBack = onBack)
 
         Column(
             modifier = Modifier
-                .fillMaxSize()
-                .padding(horizontal = 20.dp),
-            horizontalAlignment = Alignment.CenterHorizontally
+                .weight(1f)
+                .fillMaxWidth(),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center
         ) {
-            Spacer(modifier = Modifier.height(12.dp))
+            // HorizontalPager with 9:16 aspect ratio card and peek (content padding)
             HorizontalPager(
                 state = pagerState,
+                contentPadding = PaddingValues(horizontal = 48.dp),
+                pageSpacing = 16.dp,
                 modifier = Modifier
-                    .weight(1f)
                     .fillMaxWidth()
+                    .height(480.dp)
             ) { page ->
                 val slide = viewModel.slides[page]
                 Card(
                     modifier = Modifier
-                        .fillMaxSize()
-                        .padding(vertical = 12.dp),
+                        .fillMaxHeight()
+                        .aspectRatio(9f / 16f)
+                        .clip(RoundedCornerShape(28.dp)),
                     colors = CardDefaults.cardColors(containerColor = ReelSurface),
-                    shape = RoundedCornerShape(24.dp)
+                    elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
                 ) {
                     Column(
                         modifier = Modifier
                             .fillMaxSize()
-                            .padding(28.dp),
+                            .padding(24.dp),
                         verticalArrangement = Arrangement.Center,
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
+                        // Small pill badge for template type
                         Surface(
-                            shape = RoundedCornerShape(12.dp),
-                            color = ReelPrimaryViolet.copy(alpha = 0.2f)
+                            shape = CircleShape,
+                            color = ReelPrimaryViolet.copy(alpha = 0.25f)
                         ) {
                             Text(
                                 text = slide.templateType.uppercase(),
                                 color = ReelPrimaryPink,
                                 style = MaterialTheme.typography.labelLarge,
-                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
+                                fontSize = 11.sp,
+                                modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp)
                             )
                         }
-                        Spacer(modifier = Modifier.height(24.dp))
+                        Spacer(modifier = Modifier.height(20.dp))
                         Text(
                             text = slide.headline,
                             style = MaterialTheme.typography.titleLarge,
-                            fontSize = 24.sp,
+                            fontSize = 20.sp,
                             fontWeight = FontWeight.Bold,
-                            color = ReelTextPrimary
+                            color = ReelTextPrimary,
+                            textAlign = TextAlign.Center
                         )
-                        Spacer(modifier = Modifier.height(16.dp))
+                        Spacer(modifier = Modifier.height(14.dp))
                         Text(
                             text = slide.body,
                             style = MaterialTheme.typography.bodyLarge,
-                            color = ReelTextSecondary
+                            fontSize = 14.sp,
+                            color = ReelTextSecondary,
+                            textAlign = TextAlign.Center
                         )
                     }
                 }
             }
 
             Spacer(modifier = Modifier.height(16.dp))
-            GradientButton(
-                text = "Proceed to Export",
-                onClick = onNavigateExport
-            )
-            Spacer(modifier = Modifier.height(24.dp))
+
+            // Page Indicator Dots
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                repeat(viewModel.slides.size) { iteration ->
+                    val isSelected = pagerState.currentPage == iteration
+                    Box(
+                        modifier = Modifier
+                            .size(if (isSelected) 8.dp else 6.dp)
+                            .clip(CircleShape)
+                            .background(if (isSelected) ReelPrimaryPink else ReelSurfaceVariant)
+                    )
+                }
+            }
+        }
+
+        // Bottom Action Buttons: Secondary "Edit text" (outline) and Primary "Export" (gradient)
+        Surface(
+            modifier = Modifier.fillMaxWidth(),
+            color = ReelSurface,
+            shadowElevation = 8.dp,
+            shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp)
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(20.dp),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                OutlinedButton(
+                    onClick = {
+                        Toast.makeText(context, "Editing slide text...", Toast.LENGTH_SHORT).show()
+                    },
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(54.dp),
+                    shape = RoundedCornerShape(24.dp),
+                    border = BorderStroke(1.5.dp, ReelPrimaryViolet)
+                ) {
+                    Text(
+                        text = "Edit text",
+                        color = ReelTextPrimary,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+
+                Box(modifier = Modifier.weight(1f)) {
+                    GradientButton(
+                        text = "Export",
+                        onClick = onNavigateExport
+                    )
+                }
+            }
         }
     }
 }
