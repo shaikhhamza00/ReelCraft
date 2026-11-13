@@ -24,6 +24,7 @@ import android.text.TextPaint
 import android.util.Log
 import com.hamza.reelcraft.model.SlideData
 import com.hamza.reelcraft.model.Theme
+import com.hamza.reelcraft.model.SceneGenerator
 import java.io.File
 import java.io.FileOutputStream
 import kotlin.math.sin
@@ -39,12 +40,6 @@ class VideoRenderer(private val context: Context) {
         private const val BIT_RATE = 3_000_000
     }
 
-    private val bgPaint = Paint().apply { isAntiAlias = true }
-    private val starPaint = Paint().apply { color = AndroidColor.WHITE; isAntiAlias = true }
-    private val wavePath = Path()
-    private val wavePaint = Paint().apply { isAntiAlias = true }
-    private val sparkPaint = Paint().apply { isAntiAlias = true }
-    private val vignettePaint = Paint().apply { isAntiAlias = true }
     private val cardPaint = Paint().apply { color = AndroidColor.parseColor("#33000000"); style = Paint.Style.FILL; isAntiAlias = true }
     private val borderPaint = Paint().apply { style = Paint.Style.STROKE; strokeWidth = 3f; isAntiAlias = true }
 
@@ -70,9 +65,6 @@ class VideoRenderer(private val context: Context) {
 
         // 1. Draw Context-Aware Background Scene
         drawBackgroundScene(canvas, slide.bgScene, animProgress, theme)
-
-        // 2. Draw Vignette & Film Grain
-        drawVignetteAndGrain(canvas)
 
         // Colors
         val textColor = try { AndroidColor.parseColor(theme.textColorHex) } catch (e: Exception) { AndroidColor.WHITE }
@@ -115,80 +107,8 @@ class VideoRenderer(private val context: Context) {
     }
 
     private fun drawBackgroundScene(canvas: Canvas, scene: String, progress: Float, theme: Theme) {
-        when (scene.uppercase()) {
-            "NIGHT_SKY" -> drawNightSky(canvas, progress)
-            "OCEAN" -> drawOceanWaves(canvas, progress)
-            "FIRE_EMBERS" -> drawFireEmbers(canvas, progress)
-            else -> {
-                val baseColor = try { AndroidColor.parseColor(theme.backgroundColorHex) } catch (e: Exception) { AndroidColor.parseColor("#0B0B12") }
-                val grad = LinearGradient(0f, 0f, 0f, HEIGHT.toFloat(), intArrayOf(baseColor, AndroidColor.BLACK), floatArrayOf(0f, 1f), Shader.TileMode.CLAMP)
-                bgPaint.shader = grad
-                canvas.drawRect(0f, 0f, WIDTH.toFloat(), HEIGHT.toFloat(), bgPaint)
-            }
-        }
-    }
-
-    private fun drawNightSky(canvas: Canvas, progress: Float) {
-        val grad = LinearGradient(0f, 0f, 0f, HEIGHT.toFloat(), intArrayOf(AndroidColor.parseColor("#090D16"), AndroidColor.parseColor("#1B2A4A"), AndroidColor.parseColor("#05070B")), floatArrayOf(0f, 0.6f, 1f), Shader.TileMode.CLAMP)
-        bgPaint.shader = grad
-        canvas.drawRect(0f, 0f, WIDTH.toFloat(), HEIGHT.toFloat(), bgPaint)
-
-        val moonPaint = Paint().apply { color = AndroidColor.parseColor("#FFFBEB"); isAntiAlias = true; setShadowLayer(30f, 0f, 0f, AndroidColor.parseColor("#FDE047")) }
-        canvas.drawCircle(WIDTH - 150f, 220f, 60f, moonPaint)
-
-        val starCoords = listOf(100f to 150f, 250f to 300f, 400f to 120f, 550f to 280f, 150f to 500f, 600f to 600f, 300f to 750f, 650f to 200f)
-        for ((idx, coord) in starCoords.withIndex()) {
-            val twinkle = (sin((progress * 10f) + idx) * 2f + 4f)
-            starPaint.alpha = ((sin((progress * 8f) + idx) * 100 + 155).toInt()).coerceIn(50, 255)
-            canvas.drawCircle(coord.first, coord.second, twinkle, starPaint)
-        }
-    }
-
-    private fun drawOceanWaves(canvas: Canvas, progress: Float) {
-        val grad = LinearGradient(0f, 0f, 0f, HEIGHT.toFloat(), intArrayOf(AndroidColor.parseColor("#0C4A6E"), AndroidColor.parseColor("#0369A1"), AndroidColor.parseColor("#082F49")), floatArrayOf(0f, 0.5f, 1f), Shader.TileMode.CLAMP)
-        bgPaint.shader = grad
-        canvas.drawRect(0f, 0f, WIDTH.toFloat(), HEIGHT.toFloat(), bgPaint)
-
-        val shift = sin(progress * 6.0f) * 30f
-        wavePath.reset()
-        wavePath.moveTo(0f, HEIGHT * 0.7f)
-        wavePath.cubicTo(WIDTH * 0.3f + shift, HEIGHT * 0.65f, WIDTH * 0.7f - shift, HEIGHT * 0.75f, WIDTH.toFloat(), HEIGHT * 0.7f)
-        wavePath.lineTo(WIDTH.toFloat(), HEIGHT.toFloat())
-        wavePath.lineTo(0f, HEIGHT.toFloat())
-        wavePath.close()
-        wavePaint.color = AndroidColor.parseColor("#0284C7")
-        canvas.drawPath(wavePath, wavePaint)
-
-        wavePath.reset()
-        wavePath.moveTo(0f, HEIGHT * 0.8f)
-        wavePath.cubicTo(WIDTH * 0.4f - shift, HEIGHT * 0.85f, WIDTH * 0.6f + shift, HEIGHT * 0.75f, WIDTH.toFloat(), HEIGHT * 0.82f)
-        wavePath.lineTo(WIDTH.toFloat(), HEIGHT.toFloat())
-        wavePath.lineTo(0f, HEIGHT.toFloat())
-        wavePath.close()
-        wavePaint.color = AndroidColor.parseColor("#0369A1")
-        canvas.drawPath(wavePath, wavePaint)
-    }
-
-    private fun drawFireEmbers(canvas: Canvas, progress: Float) {
-        val radShader = RadialGradient(WIDTH / 2f, HEIGHT.toFloat(), WIDTH.toFloat() * 0.8f, intArrayOf(AndroidColor.parseColor("#7C2D12"), AndroidColor.parseColor("#451A03"), AndroidColor.parseColor("#180A03")), floatArrayOf(0f, 0.5f, 1f), Shader.TileMode.CLAMP)
-        bgPaint.shader = radShader
-        canvas.drawRect(0f, 0f, WIDTH.toFloat(), HEIGHT.toFloat(), bgPaint)
-
-        val sparkCoords = listOf(120f to 0.8f, 240f to 0.5f, 360f to 0.9f, 480f to 0.3f, 600f to 0.7f, 200f to 0.2f, 500f to 0.6f)
-        for ((idx, coord) in sparkCoords.withIndex()) {
-            val yOffset = ((progress + coord.second) % 1.0f) * HEIGHT
-            val currentY = HEIGHT - yOffset
-            val currentX = coord.first + (sin(yOffset * 0.02f + idx) * 20f)
-            sparkPaint.color = if (idx % 2 == 0) AndroidColor.parseColor("#FDE047") else AndroidColor.parseColor("#FB923C")
-            sparkPaint.alpha = ((1.0f - (yOffset / HEIGHT)) * 255).toInt().coerceIn(0, 255)
-            canvas.drawCircle(currentX, currentY, 6f, sparkPaint)
-        }
-    }
-
-    private fun drawVignetteAndGrain(canvas: Canvas) {
-        val vignetteShader = RadialGradient(WIDTH / 2f, HEIGHT / 2f, WIDTH.toFloat() * 0.8f, intArrayOf(AndroidColor.TRANSPARENT, AndroidColor.parseColor("#99000000")), floatArrayOf(0.6f, 1.0f), Shader.TileMode.CLAMP)
-        vignettePaint.shader = vignetteShader
-        canvas.drawRect(0f, 0f, WIDTH.toFloat(), HEIGHT.toFloat(), vignettePaint)
+        val spec = SceneGenerator.getSpec(scene)
+        SceneRenderer.render(canvas, spec, progress * 3.0f)
     }
 
     private fun drawKineticText(
