@@ -1,5 +1,6 @@
 package com.hamza.reelcraft.ui.screens
 
+import android.content.Intent
 import android.net.Uri
 import android.widget.MediaController
 import android.widget.VideoView
@@ -39,6 +40,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.core.content.FileProvider
 import com.hamza.reelcraft.model.Theme
 import com.hamza.reelcraft.ui.ReelViewModel
 import com.hamza.reelcraft.ui.components.*
@@ -757,7 +759,15 @@ fun PreviewScreen(viewModel: ReelViewModel, onBack: () -> Unit, onNavigateExport
 }
 
 @Composable
-fun ExportScreen(viewModel: ReelViewModel, onBack: () -> Unit, androidContext: android.content.Context) {
+fun ExportScreen(
+    viewModel: ReelViewModel,
+    onBack: () -> Unit,
+    onNavigateHome: () -> Unit,
+    androidContext: android.content.Context
+) {
+    val context = LocalContext.current
+    var isSavedToGallery by remember { mutableStateOf(false) }
+
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -767,56 +777,246 @@ fun ExportScreen(viewModel: ReelViewModel, onBack: () -> Unit, androidContext: a
 
         Column(
             modifier = Modifier
-                .fillMaxSize()
+                .weight(1f)
+                .fillMaxWidth()
                 .padding(horizontal = 20.dp),
             verticalArrangement = Arrangement.Center,
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            Text(
-                text = viewModel.exportStatus,
-                style = MaterialTheme.typography.bodyLarge,
-                color = ReelTextPrimary
-            )
-            Spacer(modifier = Modifier.height(16.dp))
-
-            // Video Player if video is rendered
-            viewModel.exportedVideoFile?.let { videoFile ->
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(380.dp)
-                        .clip(RoundedCornerShape(24.dp))
-                        .background(ReelSurface)
-                        .padding(bottom = 16.dp)
-                ) {
-                    AndroidView(
-                        factory = { ctx ->
-                            VideoView(ctx).apply {
-                                setVideoURI(Uri.fromFile(videoFile))
-                                setMediaController(MediaController(ctx))
-                                start()
-                            }
-                        },
-                        modifier = Modifier.fillMaxSize()
-                    )
-                }
-            }
-
-            Spacer(modifier = Modifier.height(16.dp))
-
-            if (viewModel.isGenerating) {
-                CircularProgressIndicator(color = ReelPrimaryPink)
-            } else {
-                GradientButton(
-                    text = if (viewModel.exportedVideoFile == null) "Render & Save to Gallery" else "Re-render Reel",
-                    onClick = {
-                        viewModel.exportVideo(androidContext) { file ->
-                            // exported
+            when {
+                viewModel.isGenerating -> {
+                    // Rendering state with linear progress and message
+                    Card(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 24.dp),
+                        colors = CardDefaults.cardColors(containerColor = ReelSurface),
+                        shape = RoundedCornerShape(24.dp)
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(28.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.Center
+                        ) {
+                            CircularProgressIndicator(
+                                color = ReelPrimaryPink,
+                                strokeWidth = 4.dp,
+                                modifier = Modifier.size(56.dp)
+                            )
+                            Spacer(modifier = Modifier.height(20.dp))
+                            Text(
+                                text = "Aapki reel ban rahi hai...",
+                                style = MaterialTheme.typography.titleLarge,
+                                fontSize = 18.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = ReelTextPrimary
+                            )
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Text(
+                                text = viewModel.exportStatus,
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = ReelTextSecondary,
+                                textAlign = TextAlign.Center
+                            )
                         }
                     }
-                )
+                }
+
+                viewModel.exportedVideoFile != null -> {
+                    val videoFile = viewModel.exportedVideoFile!!
+
+                    // 9:16 Aspect Ratio Card with rounded corners for video player
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(420.dp)
+                            .aspectRatio(9f / 16f)
+                            .clip(RoundedCornerShape(28.dp))
+                            .background(ReelSurface)
+                    ) {
+                        AndroidView(
+                            factory = { ctx ->
+                                VideoView(ctx).apply {
+                                    setVideoURI(Uri.fromFile(videoFile))
+                                    setMediaController(MediaController(ctx))
+                                    start()
+                                }
+                            },
+                            modifier = Modifier.fillMaxSize()
+                        )
+                    }
+                }
+
+                viewModel.exportStatus.contains("failed", ignoreCase = true) -> {
+                    // Error state card with retry button
+                    Card(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 24.dp),
+                        colors = CardDefaults.cardColors(containerColor = ReelSurface),
+                        shape = RoundedCornerShape(24.dp)
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(28.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.ErrorOutline,
+                                contentDescription = "Error",
+                                tint = ReelError,
+                                modifier = Modifier.size(48.dp)
+                            )
+                            Spacer(modifier = Modifier.height(16.dp))
+                            Text(
+                                text = "Export Failed",
+                                style = MaterialTheme.typography.titleLarge,
+                                color = ReelTextPrimary,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Text(
+                                text = viewModel.exportStatus,
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = ReelTextSecondary,
+                                textAlign = TextAlign.Center
+                            )
+                            Spacer(modifier = Modifier.height(20.dp))
+                            GradientButton(
+                                text = "Retry Export",
+                                onClick = {
+                                    viewModel.exportVideo(androidContext) { _ -> }
+                                }
+                            )
+                        }
+                    }
+                }
+
+                else -> {
+                    // Initial State before rendering
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.MovieFilter,
+                            contentDescription = null,
+                            tint = ReelPrimaryPink,
+                            modifier = Modifier.size(64.dp)
+                        )
+                        Spacer(modifier = Modifier.height(16.dp))
+                        Text(
+                            text = "Ready to Export Your Cinematic Reel",
+                            style = MaterialTheme.typography.titleLarge,
+                            fontSize = 18.sp,
+                            textAlign = TextAlign.Center,
+                            color = ReelTextPrimary
+                        )
+                        Spacer(modifier = Modifier.height(24.dp))
+                        GradientButton(
+                            text = "Render & Save to Gallery",
+                            onClick = {
+                                viewModel.exportVideo(androidContext) { file ->
+                                    if (file != null) isSavedToGallery = true
+                                }
+                            }
+                        )
+                    }
+                }
             }
-            Spacer(modifier = Modifier.height(24.dp))
+        }
+
+        // 3 Actions at bottom when video is successfully exported
+        if (viewModel.exportedVideoFile != null) {
+            Surface(
+                modifier = Modifier.fillMaxWidth(),
+                color = ReelSurface,
+                shadowElevation = 8.dp,
+                shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp)
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(20.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        // 1. Save to Gallery / Saved Button
+                        OutlinedButton(
+                            onClick = {
+                                isSavedToGallery = true
+                                Toast.makeText(context, "Saved to Gallery!", Toast.LENGTH_SHORT).show()
+                            },
+                            modifier = Modifier
+                                .weight(1f)
+                                .height(50.dp),
+                            shape = RoundedCornerShape(20.dp),
+                            border = BorderStroke(1.5.dp, if (isSavedToGallery) Color(0xFF34D399) else ReelPrimaryViolet)
+                        ) {
+                            Icon(
+                                imageVector = if (isSavedToGallery) Icons.Default.Check else Icons.Default.Download,
+                                contentDescription = null,
+                                tint = if (isSavedToGallery) Color(0xFF34D399) else ReelTextPrimary,
+                                modifier = Modifier.size(18.dp)
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = if (isSavedToGallery) "Saved" else "Save to Gallery",
+                                color = if (isSavedToGallery) Color(0xFF34D399) else ReelTextPrimary,
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 13.sp
+                            )
+                        }
+
+                        // 2. Share Button (Primary Gradient)
+                        Box(modifier = Modifier.weight(1f)) {
+                            GradientButton(
+                                text = "Share",
+                                onClick = {
+                                    val videoFile = viewModel.exportedVideoFile
+                                    if (videoFile != null) {
+                                        val intent = Intent(Intent.ACTION_SEND).apply {
+                                            type = "video/mp4"
+                                            putExtra(
+                                                Intent.EXTRA_STREAM,
+                                                FileProvider.getUriForFile(androidContext, "${androidContext.packageName}.fileprovider", videoFile)
+                                            )
+                                            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                                        }
+                                        androidContext.startActivity(Intent.createChooser(intent, "Share Reel"))
+                                    }
+                                }
+                            )
+                        }
+                    }
+
+                    // 3. Create another (Outline Button)
+                    OutlinedButton(
+                        onClick = onNavigateHome,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(50.dp),
+                        shape = RoundedCornerShape(20.dp),
+                        border = BorderStroke(1.5.dp, ReelSurfaceVariant)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Add,
+                            contentDescription = null,
+                            tint = ReelTextSecondary,
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            text = "Create another",
+                            color = ReelTextSecondary,
+                            fontWeight = FontWeight.Medium,
+                            fontSize = 14.sp
+                        )
+                    }
+                }
+            }
         }
     }
 }

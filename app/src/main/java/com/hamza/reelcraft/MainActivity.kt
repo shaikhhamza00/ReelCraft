@@ -67,6 +67,11 @@ class MainActivity : ComponentActivity() {
                             ExportScreen(
                                 viewModel = viewModel,
                                 onBack = { navController.popBackStack() },
+                                onNavigateHome = {
+                                    navController.navigate("home") {
+                                        popUpTo("home") { inclusive = true }
+                                    }
+                                },
                                 androidContext = this@MainActivity
                             )
                         }
