@@ -8,18 +8,17 @@ data class Theme(
     val fontName: String = "Default"
 ) {
     companion object {
-        val Neon = Theme("Neon", "#0D0221", "#FFFF00", "#FF007F")
-        val Dark = Theme("Dark", "#1A1A2E", "#FFFFFF", "#00FFCC")
-        val Book = Theme("Book", "#FDF6E3", "#263238", "#D35400")
-        val CinematicRoom = Theme("Cinematic Room", "#0A0F1D", "#FFFFFF", "#38BDF8")
-        val Characters = Theme("Characters", "#180126", "#F3E8FF", "#EC4899")
-        val Table = Theme("Table", "#0F172A", "#E2E8F0", "#10B981")
-        val Minimal = Theme("Minimal", "#F8F9FA", "#212529", "#007BFF")
+        val Kinetic = Theme("KINETIC", "#0B0B12", "#FFFFFF", "#7C4DFF")
+        val Neon = Theme("NEON", "#0D0221", "#FFFF00", "#FF007F")
+        val DarkCinematic = Theme("DARK_CINEMATIC", "#08080C", "#F2F2F7", "#38BDF8")
+        val Minimal = Theme("MINIMAL", "#F8F9FA", "#212529", "#007BFF")
+        val GradientMesh = Theme("GRADIENT_MESH", "#111827", "#FFFFFF", "#22D3EE")
+        val VintagePaper = Theme("VINTAGE_PAPER", "#FDF6E3", "#263238", "#D35400")
 
-        val allThemes = listOf(Neon, Dark, Book, CinematicRoom, Characters, Table, Minimal)
+        val allThemes = listOf(Kinetic, Neon, DarkCinematic, Minimal, GradientMesh, VintagePaper)
 
         fun fromName(name: String): Theme {
-            return allThemes.find { it.name.equals(name, ignoreCase = true) } ?: Neon
+            return allThemes.find { it.name.equals(name, ignoreCase = true) } ?: Kinetic
         }
     }
 }
