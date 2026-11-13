@@ -40,17 +40,25 @@ class MainActivity : ComponentActivity() {
                             }
                         }
                         composable("create") {
-                            CreateScreen(viewModel = viewModel) {
-                                navController.navigate("preview")
-                            }
+                            CreateScreen(
+                                viewModel = viewModel,
+                                onBack = { navController.popBackStack() },
+                                onNavigatePreview = { navController.navigate("preview") }
+                            )
                         }
                         composable("preview") {
-                            PreviewScreen(viewModel = viewModel) {
-                                navController.navigate("export")
-                            }
+                            PreviewScreen(
+                                viewModel = viewModel,
+                                onBack = { navController.popBackStack() },
+                                onNavigateExport = { navController.navigate("export") }
+                            )
                         }
                         composable("export") {
-                            ExportScreen(viewModel = viewModel, androidContext = this@MainActivity)
+                            ExportScreen(
+                                viewModel = viewModel,
+                                onBack = { navController.popBackStack() },
+                                androidContext = this@MainActivity
+                            )
                         }
                     }
                 }
