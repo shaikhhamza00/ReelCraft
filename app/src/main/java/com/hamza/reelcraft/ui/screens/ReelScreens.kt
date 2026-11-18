@@ -51,7 +51,8 @@ fun HomeScreen(
     viewModel: ReelViewModel,
     onNavigateCreate: () -> Unit,
     onNavigateSettings: () -> Unit,
-    onNavigateThemeTest: () -> Unit
+    onNavigateThemeTest: () -> Unit,
+    onNavigateExplainerTest: () -> Unit
 ) {
     val gradientBrush = Brush.horizontalGradient(ReelGradientPrimary)
 
@@ -128,6 +129,19 @@ fun HomeScreen(
             shape = RoundedCornerShape(12.dp)
         ) {
             Text("🧪 Test Theme Grid (12 Topics x 2 Seeds)", color = Color.Cyan, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+        }
+
+        Spacer(modifier = Modifier.height(8.dp))
+
+        Button(
+            onClick = onNavigateExplainerTest,
+            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF3B82F6)),
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(44.dp),
+            shape = RoundedCornerShape(12.dp)
+        ) {
+            Text("💡 Test Explainer Mode POC (Captions & Props)", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 13.sp)
         }
 
         Spacer(modifier = Modifier.height(16.dp))
