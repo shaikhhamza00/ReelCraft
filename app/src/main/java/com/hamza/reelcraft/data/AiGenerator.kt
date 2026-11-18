@@ -17,9 +17,7 @@ object AiGenerator {
     private const val TAG = "AiGenerator"
 
     suspend fun generateSlidesForTopic(context: Context, niche: String, topic: String, apiKey: String): List<SlideData> {
-        Log.i(TAG, "generateSlidesForTopic called with niche='$niche', topic='$topic', apiKeyPresent=${apiKey.isNotBlank()}")
         if (apiKey.isBlank()) {
-            Log.e(TAG, "API Key is blank! Throwing IllegalArgumentException.")
             throw IllegalArgumentException("Gemini API Key missing! Please enter your API Key in Settings.")
         }
 
@@ -58,16 +56,6 @@ object AiGenerator {
                 3. No moral lectures ("zid karo", "sabaq", "haar mat maano"). Show, don't tell.
             """.trimIndent()
 
-            Log.d(TAG, "Connecting to Gemini API endpoint...")
-            val url = URL("https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=$apiKey")
-            val connection = (url.openConnection() as HttpURLConnection).apply {
-                requestMethod = "POST"
-                setRequestProperty("Content-Type", "application/json; charset=utf-8")
-                doOutput = true
-                connectTimeout = 15000
-                readTimeout = 15000
-            }
-
             val jsonBody = JSONObject().apply {
                 put("contents", JSONArray().put(
                     JSONObject().put("parts", JSONArray().put(
@@ -77,67 +65,90 @@ object AiGenerator {
                 put("generationConfig", JSONObject().put("responseMimeType", "application/json").put("temperature", 0.9).put("topP", 0.95))
             }
 
-            connection.outputStream.use { os ->
-                val input = jsonBody.toString().toByteArray(Charsets.UTF_8)
-                os.write(input, 0, input.size)
+            val modelsToTry = listOf("gemini-1.5-flash", "gemini-pro", "gemini-1.5-pro", "gemini-1.5-flash-latest")
+            var responseStr: String? = null
+            var lastErrorMsg = ""
+
+            for (modelName in modelsToTry) {
+                try {
+                    Log.d(TAG, "Trying model: $modelName")
+                    val url = URL("https://generativelanguage.googleapis.com/v1beta/models/$modelName:generateContent?key=$apiKey")
+                    val connection = (url.openConnection() as HttpURLConnection).apply {
+                        requestMethod = "POST"
+                        setRequestProperty("Content-Type", "application/json; charset=utf-8")
+                        doOutput = true
+                        connectTimeout = 15000
+                        readTimeout = 15000
+                    }
+
+                    connection.outputStream.use { os ->
+                        val input = jsonBody.toString().toByteArray(Charsets.UTF_8)
+                        os.write(input, 0, input.size)
+                    }
+
+                    val responseCode = connection.responseCode
+                    Log.i(TAG, "Model $modelName response code: $responseCode")
+                    if (responseCode == HttpURLConnection.HTTP_OK) {
+                        val responseStream = BufferedReader(InputStreamReader(connection.inputStream, Charsets.UTF_8))
+                        responseStr = responseStream.readText()
+                        responseStream.close()
+                        break
+                    } else {
+                        val errorStream = connection.errorStream?.bufferedReader()?.use { it.readText() } ?: "No error stream"
+                        lastErrorMsg = "HTTP $responseCode: $errorStream"
+                        Log.e(TAG, "Model $modelName failed: $lastErrorMsg")
+                    }
+                } catch (e: Exception) {
+                    lastErrorMsg = e.message ?: "Unknown exception"
+                    Log.e(TAG, "Exception trying model $modelName", e)
+                }
             }
 
-            val responseCode = connection.responseCode
-            Log.i(TAG, "Gemini API response code: $responseCode")
-            if (responseCode == HttpURLConnection.HTTP_OK) {
-                val responseStream = BufferedReader(InputStreamReader(connection.inputStream, Charsets.UTF_8))
-                val responseStr = responseStream.readText()
-                responseStream.close()
+            if (responseStr.isNullOrBlank()) {
+                throw RuntimeException("All Gemini models failed. Last error: $lastErrorMsg")
+            }
 
-                Log.d(TAG, "Gemini raw response length: ${responseStr.length}")
-                val root = JSONObject(responseStr)
-                val candidates = root.getJSONArray("candidates")
-                val content = candidates.getJSONObject(0).getJSONObject("content")
-                val parts = content.getJSONArray("parts")
-                var textOutput = parts.getJSONObject(0).getString("text").trim()
+            val root = JSONObject(responseStr)
+            val candidates = root.getJSONArray("candidates")
+            val content = candidates.getJSONObject(0).getJSONObject("content")
+            val parts = content.getJSONArray("parts")
+            var textOutput = parts.getJSONObject(0).getString("text").trim()
 
-                if (textOutput.startsWith("```json")) {
-                    textOutput = textOutput.removePrefix("```json").removeSuffix("```").trim()
-                } else if (textOutput.startsWith("```")) {
-                    textOutput = textOutput.removePrefix("```").removeSuffix("```").trim()
-                }
+            if (textOutput.startsWith("```json")) {
+                textOutput = textOutput.removePrefix("```json").removeSuffix("```").trim()
+            } else if (textOutput.startsWith("```")) {
+                textOutput = textOutput.removePrefix("```").removeSuffix("```").trim()
+            }
 
-                Log.d(TAG, "Cleaned Gemini text output: $textOutput")
-                val jsonArray = JSONArray(textOutput)
-                val slides = mutableListOf<SlideData>()
-                for (i in 0 until jsonArray.length()) {
-                    val obj = jsonArray.optJSONObject(i) ?: continue
-                    val bodyText = obj.optString("body", "Body content")
-                    val vText = obj.optString("voiceText", bodyText.take(80))
-                    val bgMood = obj.optString("bgMood", niche)
+            val jsonArray = JSONArray(textOutput)
+            val slides = mutableListOf<SlideData>()
+            for (i in 0 until jsonArray.length()) {
+                val obj = jsonArray.optJSONObject(i) ?: continue
+                val bodyText = obj.optString("body", "Body content")
+                val vText = obj.optString("voiceText", bodyText.take(80))
+                val bgMood = obj.optString("bgMood", niche)
 
-                    val uniqueScene = SceneGenerator.pickUniquePreset(recentPresets, projectSeed + i)
-                    securePrefs.addRecentPresetId(uniqueScene)
+                val uniqueScene = SceneGenerator.pickUniquePreset(recentPresets, projectSeed + i)
+                securePrefs.addRecentPresetId(uniqueScene)
 
-                    slides.add(
-                        SlideData(
-                            templateType = obj.optString("templateType", "story"),
-                            headline = obj.optString("headline", "Heading"),
-                            body = bodyText,
-                            voiceText = vText,
-                            voiceStyle = obj.optString("voiceStyle", defaultStyle),
-                            bgScene = bgMood.ifBlank { uniqueScene },
-                            accentColor = obj.optString("accentColor", "#22D3EE"),
-                            seed = projectSeed + i
-                        )
+                slides.add(
+                    SlideData(
+                        templateType = obj.optString("templateType", "story"),
+                        headline = obj.optString("headline", "Heading"),
+                        body = bodyText,
+                        voiceText = vText,
+                        voiceStyle = obj.optString("voiceStyle", defaultStyle),
+                        bgScene = bgMood.ifBlank { uniqueScene },
+                        accentColor = obj.optString("accentColor", "#22D3EE"),
+                        seed = projectSeed + i
                     )
-                }
+                )
+            }
 
-                Log.i(TAG, "Successfully parsed ${slides.size} slides from Gemini API")
-                if (slides.isNotEmpty()) {
-                    return@withContext slides
-                } else {
-                    throw RuntimeException("Gemini returned empty slides array.")
-                }
+            if (slides.isNotEmpty()) {
+                slides
             } else {
-                val errorStream = connection.errorStream?.bufferedReader()?.use { it.readText() } ?: "No error stream"
-                Log.e(TAG, "Gemini API error (HTTP $responseCode): $errorStream")
-                throw RuntimeException("Gemini API Error (HTTP $responseCode): $errorStream")
+                throw RuntimeException("Gemini returned empty slides array.")
             }
         }
     }
