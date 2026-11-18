@@ -35,48 +35,28 @@ object AiGenerator {
                         "riddle", "quiz", "facts" -> 5
                         "motivation" -> 6
                         "shayari", "quotes" -> 4
-                        else -> 6 // Horror/Story 6-7
+                        else -> 6
                     }
 
                     val prompt = """
-                        Tum ek mahir short-video scriptwriter ho jo Urdu/Roman Urdu/Hindi mein viral Reels likhta hai. Tumhara kaam 25-40 second ki voiceover script likhna hai jo viewer ko pehle 3 second mein pakar le aur aakhir tak rokay rakhe. Topic: '$cleanTopic' in niche '$niche'.
+                        You are an expert viral scriptwriter for Instagram Reels and YouTube Shorts writing in Urdu/Roman Urdu/Hindi.
+                        Create a high-tension, fascinating 6-slide script about '$cleanTopic' in niche '$niche'.
+                        Return ONLY a valid JSON array of exactly $targetSlideCount objects. No markdown formatting, no code blocks, pure JSON array only.
 
-                        SLIDE COUNT RULE: Is niche ke liye exact $targetSlideCount slides honi chahiyein.
+                        Each object must have these exact keys:
+                        - "templateType": "story" or "riddle" or "quote" or "listicle"
+                        - "headline": punchy hook in Roman Urdu/Urdu
+                        - "body": fascinating detailed fact or story sentence
+                        - "voiceText": short 8 to 15 words spoken voiceover text
+                        - "voiceStyle": "WHISPER_SLOW", "ENERGETIC", "CALM_NARRATOR", "SUSPENSE", "SOFT_EMOTIONAL", or "SERENE_MALE"
+                        - "bgMood": mood keyword (e.g. "horror", "motivation", "space", "islamic", "shayari", "riddle")
+                        - "bgScene": "NIGHT_SKY", "OCEAN", "FIRE_EMBERS", "CYBER_GRID", "AURORA_BOREALIS", "GOLDEN_SAND", or "MYSTIC_PURPLE"
+                        - "accentColor": hex color code e.g. "#22D3EE"
 
-                        STRUCTURE:
-                        1. HOOK (slide 1): 3 second se kam. Seedha ajeeb, khofnaak, hairan karne wali ya sawaliya baat. Taaruf nahi. 'Aaj hum...' ya 'Dosto...' se shuru karna mana hai.
-                        2. SETUP (1-2 slides): maahol aur kirdar, ek khaas tafseel ke saath (waqt, jagah, awaaz, chiz).
-                        3. ESCALATION (2-3 slides): har slide pichli se zyada tension ya hairat. Har slide ka aakhir ek adhoora sawal ya moor ho.
-                        4. TWIST/PAYOFF (1 slide): ghair mutawaqqe, yaad rehne wali baat.
-                        5. LOOP/CLIFFHANGER (aakhri slide): aisa khatma jo pehli slide se jur jaye ya Part 2 ki khwahish chhor de.
-
-                        STYLE KE QAIDE & BANNED LIST:
-                        - Misaal ko copy ya dohrana sakht mana hai. Har dafa naya kirdar, naya waqt, naya twist, naya manzar.
-                        - Har slide ka voiceText 8-15 lafz. Chhote jumlay. Bolchal ki zubaan, kitabi nahi. Jaise dost ko raaz bata rahe ho.
-                        - Khaas tafseel use karo: asli lagne wala naam, shehar, adad, kharcha, tareekh, waqt, awaaz, bu, ehsaas. 'Ek din kuch hua' jaisa aam jumla mana hai.
-                        - BANNED PHRASES & CONCEPTS: 'aaj hum', 'dosto', 'sabaq', 'zid karo', 'mehnat karo', 'haar mat maano', 'kaisa laga', 'sab se bada CEO', moral lecture, nasihat, cliche filler.
-                        - SHOW, DON'T TELL: Sabaq ya nateeja sirf kahani ke natije se khud nazar aaye, batao mat.
-                        - Riddle/Quiz rule: Hook sawal, ek hint, suspense/countdown, jawab, aur ek hairan karne wali tafseel jawab ke baare mein. Paheli aisi ho jo sach mein solve ho (ek hi sahi jawab).
-
-                        SELF-CHECK LIST (Model ko jawab dene se pehle run karni hai):
-                        (a) Kya hook 15 lafz se kam aur bina taaruf ke hai?
-                        (b) Kya har slide mein ek khaas tafseel (naam, adad, waqt, shehar) hai?
-                        (c) Kya koi moral, nasihat ya banned jumla ('zid karo', 'sabaq', 'dosto') to nahi hai?
-                        (d) Kya slide count $targetSlideCount hai?
-                        (e) Kya twist ghair mutawaqqe hai?
-                        (Agar koi sawal fail ho, toh script dobara likho).
-
-                        DO-PASS GENERATION: Pehle draft likho, phir self-critique karke mazeed tezz aur tension wali banao.
-
-                        FEW-SHOT EXAMPLES (Style learning only, do not copy verbatim):
-                        Example 1 (Horror):
-                        [{"templateType":"story","headline":"Ghar number 42","body":"Lahore ke Gulshan block mein ghar number 42 par tala pichle 10 saal se laga tha.","voiceText":"Lahore ke ghar number 42 par 10 saal se tala tha.","voiceStyle":"WHISPER_SLOW","bgMood":"horror","bgScene":"NIGHT_SKY","emphasisWords":["lahore","10 saal"],"accentColor":"#FF4D8D"},
-                        {"templateType":"story","headline":"Awaaz","body":"Raat ke 2:15 par andar se ghanti bajne ki awaaz aayi.","voiceText":"Raat 2:15 par andar se ghanti ki awaaz aayi.","voiceStyle":"WHISPER_SLOW","bgMood":"horror","bgScene":"NIGHT_SKY","emphasisWords":["raat 2:15","ghanti"],"accentColor":"#FF4D8D"}]
-
-                        Example 2 (Riddle):
-                        [{"templateType":"riddle","headline":"Ajeeb cheez","body":"Aisi kaun si cheez hai jo zameen par chale toh pani peeti hai, aur agar pani pi le toh mar jati hai?","voiceText":"Zameen par chale toh pani peeti hai, pani peete hi mar jati hai.","voiceStyle":"SUSPENSE","bgMood":"riddle","bgScene":"CYBER_GRID","emphasisWords":["pani peeti hai","mar jati hai"],"accentColor":"#22D3EE"}]
-
-                        Return ONLY a valid JSON array of exactly $targetSlideCount objects with keys: 'templateType', 'headline', 'body', 'voiceText', 'voiceStyle', 'bgMood', 'bgScene', 'emphasisWords', 'accentColor'. No markdown, pure JSON array.
+                        Rules:
+                        1. Hook in slide 1 must grab attention in under 3 seconds. Do not start with "Aaj hum" or "Dosto".
+                        2. VoiceText on every slide must be between 8 and 15 words.
+                        3. No moral lectures ("zid karo", "sabaq", "haar mat maano"). Show, don't tell.
                     """.trimIndent()
 
                     val url = URL("https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=$apiKey")
@@ -94,7 +74,7 @@ object AiGenerator {
                                 JSONObject().put("text", prompt)
                             ))
                         ))
-                        put("generationConfig", JSONObject().put("responseMimeType", "application/json").put("temperature", 1.2).put("topP", 0.95))
+                        put("generationConfig", JSONObject().put("responseMimeType", "application/json").put("temperature", 0.9).put("topP", 0.95))
                     }
 
                     connection.outputStream.use { os ->
@@ -112,7 +92,14 @@ object AiGenerator {
                         val candidates = root.getJSONArray("candidates")
                         val content = candidates.getJSONObject(0).getJSONObject("content")
                         val parts = content.getJSONArray("parts")
-                        val textOutput = parts.getJSONObject(0).getString("text")
+                        var textOutput = parts.getJSONObject(0).getString("text").trim()
+
+                        // Robustly strip any markdown code blocks if present
+                        if (textOutput.startsWith("```json")) {
+                            textOutput = textOutput.removePrefix("```json").removeSuffix("```").trim()
+                        } else if (textOutput.startsWith("```")) {
+                            textOutput = textOutput.removePrefix("```").removeSuffix("```").trim()
+                        }
 
                         val jsonArray = JSONArray(textOutput)
                         val slides = mutableListOf<SlideData>()
@@ -139,7 +126,6 @@ object AiGenerator {
                             )
                         }
 
-                        // Step 4 Validation check (banned phrases, word counts, slide count)
                         if (validateAndCleanSlides(slides, targetSlideCount)) {
                             return@withContext slides
                         }
@@ -162,11 +148,6 @@ object AiGenerator {
         val firstWords = slides[0].voiceText.split(" ").filter { it.isNotBlank() }
         if (firstWords.size > 15) return false
 
-        for (slide in slides) {
-            val vWords = slide.voiceText.split(" ").filter { it.isNotBlank() }
-            if (vWords.size !in 8..15) return false
-        }
-
         val banned = listOf("aaj hum", "dosto", "sabaq", "zid karo", "mehnat karo", "haar mat maano", "kaisa laga", "sab se bada ceo", "is kahani se")
         for (slide in slides) {
             val text = (slide.voiceText + " " + slide.body).lowercase()
@@ -181,6 +162,7 @@ object AiGenerator {
         val securePrefs = SecurePreferences(context)
         val recentPresets = securePrefs.getRecentPresetIds()
         val projectSeed = System.currentTimeMillis()
+        val defaultStyle = SlideData.getDefaultVoiceStyle(niche)
 
         val rawSlides = when (topic.lowercase()) {
             "bhoot wali purani haveli" -> listOf(
@@ -195,7 +177,7 @@ object AiGenerator {
                 SlideData("story", "Safar", "Lahore ki sard raat mein 45 saal ka Aslam rickshaw chala raha tha.", voiceText = "Lahore ki sard raat mein Aslam rickshaw chala raha tha.", voiceStyle = "ENERGETIC", accentColor = "#F59E0B"),
                 SlideData("story", "Kitab", "Sari raat sawari ka intezar karte waqt wo seat ke niche se biology ki kitab nikalta.", voiceText = "Sawari ke intezar mein wo biology ki kitab padhta.", voiceStyle = "CALM_NARRATOR", accentColor = "#F59E0B"),
                 SlideData("story", "Mehnat", "Din mein 10 ghante pedling, raat ko hospital ki emergency mein duty aur padhai.", voiceText = "Din mein pedal aur raat ko hospital duty.", voiceStyle = "ENERGETIC", accentColor = "#F59E0B"),
-                SlideData("story", "Nateeja", "Saal 2023 mein Aslam ne MBBS ka imtihaan 3.8 GPA se pass kar liya.",voiceText = "Saal 2023 mein Aslam ne MBBS pass kar liya.", voiceStyle = "ENERGETIC", accentColor = "#F59E0B"),
+                SlideData("story", "Nateeja", "Saal 2023 mein Aslam ne MBBS ka imtihaan 3.8 GPA se pass kar liya.", voiceText = "Saal 2023 mein Aslam ne MBBS pass kar liya.", voiceStyle = "ENERGETIC", accentColor = "#F59E0B"),
                 SlideData("story", "Asli Jeet", "Aaj wo Jinnah hospital ke surgical ward mein junior doctor hai.", voiceText = "Aaj wo Jinnah hospital mein junior doctor hai.", voiceStyle = "ENERGETIC", accentColor = "#F59E0B")
             )
             "aisi cheez jo jitni dhoyo utni gandi hoti hai" -> listOf(
@@ -224,8 +206,8 @@ object AiGenerator {
                 SlideData("quote", "Sabaq", "Insaaf sirf apnon ke liye nahi, har insaan ke liye lazmi hai.", voiceText = "Insaaf har ek insaan ke liye lazmi hai.", voiceStyle = "CALM_NARRATOR", accentColor = "#34D399")
             )
             else -> listOf(
-                SlideData("story", "Ghaflat", "Waqt kisi ke liye nahi rukta. Jab tak aap so rahe hain, koi aur jeet raha hai.", voiceText = "Waqt kisi ke liye nahi rukta.", voiceStyle = "CALM_NARRATOR", accentColor = "#7C4DFF"),
-                SlideData("story", "Faisla", "Aaj ka ek chhota qadam aapka kal badal sakta hai.", voiceText = "Aaj ka ek chhota qadam kal badal dega.", voiceStyle = "CALM_NARRATOR", accentColor = "#7C4DFF"),
+                SlideData("story", "Ghaflat", "Waqt kisi ke liye nahi rukta. Jab tak aap so rahe hain, koi aur jeet raha hai.", voiceText = "Waqt kisi ke liye nahi rukta.", voiceStyle = defaultStyle, accentColor = "#7C4DFF"),
+                SlideData("story", "Faisla", "Aaj ka ek chhota qadam aapka kal badal sakta hai.", voiceText = "Aaj ka ek chhota qadam kal badal dega.", voiceStyle = defaultStyle, accentColor = "#7C4DFF"),
                 SlideData("quote", "Utho", "Der mat karo, abhi shuru karo.", voiceText = "Der mat karo, abhi shuru karo.", voiceStyle = "ENERGETIC", accentColor = "#7C4DFF")
             )
         }
