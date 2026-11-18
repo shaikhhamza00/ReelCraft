@@ -5,6 +5,7 @@ import android.util.Log
 import com.hamza.reelcraft.model.SceneGenerator
 import com.hamza.reelcraft.model.SlideData
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.json.JSONObject
@@ -18,7 +19,7 @@ object AiGenerator {
 
     suspend fun generateSlidesForTopic(context: Context, niche: String, topic: String, apiKey: String): List<SlideData> {
         if (apiKey.isBlank()) {
-            throw IllegalArgumentException("Gemini API Key missing! Please enter your API Key in Settings.")
+            throw IllegalArgumentException("API key sahi nahi ya missing hai. Settings mein valid Gemini API key enter karein.")
         }
 
         val securePrefs = SecurePreferences(context)
@@ -65,22 +66,26 @@ object AiGenerator {
                 put("generationConfig", JSONObject().put("responseMimeType", "application/json").put("temperature", 0.9).put("topP", 0.95))
             }
 
-            val apiVersions = listOf("v1", "v1beta")
-            val modelsToTry = listOf("gemini-1.5-flash", "gemini-1.5-pro", "gemini-pro", "gemini-1.5-flash-latest", "gemini-2.0-flash")
+            val primaryModel = ModelResolver.resolveModel(context, apiKey)
+            val modelsToTry = listOf(primaryModel) + ModelResolver.FALLBACK_MODELS
+
             var responseStr: String? = null
             var lastErrorMsg = ""
 
-            for (apiVersion in apiVersions) {
-                for (modelName in modelsToTry) {
+            for (modelName in modelsToTry) {
+                var attempt = 0
+                var successForModel = false
+
+                while (attempt < 2 && !successForModel) {
                     try {
-                        Log.d(TAG, "Trying API version: $apiVersion, model: $modelName")
-                        val url = URL("https://generativelanguage.googleapis.com/$apiVersion/models/$modelName:generateContent?key=$apiKey")
+                        Log.d(TAG, "Trying model: $modelName (attempt ${attempt + 1})")
+                        val url = URL("https://generativelanguage.googleapis.com/v1beta/models/$modelName:generateContent?key=$apiKey")
                         val connection = (url.openConnection() as HttpURLConnection).apply {
                             requestMethod = "POST"
                             setRequestProperty("Content-Type", "application/json; charset=utf-8")
                             doOutput = true
                             connectTimeout = 15000
-                            readTimeout = 15000
+                            readTimeout = 60000 // 60s read timeout
                         }
 
                         connection.outputStream.use { os ->
@@ -89,52 +94,88 @@ object AiGenerator {
                         }
 
                         val responseCode = connection.responseCode
-                        Log.i(TAG, "API $apiVersion / Model $modelName response code: $responseCode")
+                        Log.i(TAG, "Model $modelName response code: $responseCode")
+
                         if (responseCode == HttpURLConnection.HTTP_OK) {
-                            val responseStream = BufferedReader(InputStreamReader(connection.inputStream, Charsets.UTF_8))
+                            val responseStream = BufferedReader(InputStreamReader(connection.inputStream))
                             responseStr = responseStream.readText()
                             responseStream.close()
-                            Log.i(TAG, "Success with API $apiVersion and model $modelName")
+                            successForModel = true
                             break
                         } else {
-                            val errorStream = connection.errorStream?.bufferedReader()?.use { it.readText() } ?: "No error stream"
-                            lastErrorMsg = "API $apiVersion / Model $modelName (HTTP $responseCode): $errorStream"
+                            val errorStream = connection.errorStr() ?: "No error stream"
+                            lastErrorMsg = "Model $modelName failed with HTTP $responseCode: $errorStream"
                             Log.e(TAG, lastErrorMsg)
+
+                            // Error Handling (Step 2)
+                            if (responseCode == 400) {
+                                throw IllegalArgumentException("API key sahi nahi hai (HTTP 400 Bad Request).")
+                            }
+                            if (responseCode == 401 || responseCode == 403) {
+                                throw SecurityException("API key unauthorized hai ya key mein Gemini API enable nahi hai (HTTP $responseCode).")
+                            }
+                            if (responseCode == 429) {
+                                Log.w(TAG, "Rate limit (429) hit for model $modelName. Retrying in 2 seconds...")
+                                delay(2000)
+                                attempt++
+                                continue
+                            }
+                            // Only 404 and 503 move to next model
+                            if (responseCode == 404 || responseCode == 503) {
+                                break // try next model
+                            } else {
+                                throw RuntimeException(lastErrorMsg)
+                            }
                         }
                     } catch (e: Exception) {
-                        lastErrorMsg = "API $apiVersion / Model $modelName Exception: ${e.message}"
+                        if (e is IllegalArgumentException || e is SecurityException) throw e
+                        lastErrorMsg = "Exception on model $modelName: ${e.message}"
                         Log.e(TAG, lastErrorMsg, e)
+                        break
                     }
                 }
                 if (!responseStr.isNullOrBlank()) break
             }
 
             if (responseStr.isNullOrBlank()) {
-                throw RuntimeException("All Gemini API versions and models failed. Last error: $lastErrorMsg")
+                throw RuntimeException("Tamam Gemini models fail ho gaye hain. Asal wajah: $lastErrorMsg")
             }
 
-            val root = JSONObject(responseStr)
-            val candidates = root.getJSONArray("candidates")
-            val content = candidates.getJSONObject(0).getJSONObject("content")
-            val parts = content.getJSONArray("parts")
-            var textOutput = parts.getJSONObject(0).getString("text").trim()
+            // Step 3: Parsing response, taking parts where thought is not true
+            var textOutput = extractValidTextOutput(responseStr)
 
-            if (textOutput.startsWith("```json")) {
-                textOutput = textOutput.removePrefix("```json").removeSuffix("```").trim()
-            } else if (textOutput.startsWith("```")) {
-                textOutput = textOutput.removePrefix("```").removeSuffix("```").trim()
+            var jsonArray: JSONArray? = null
+            var parseAttempt = 0
+            while (parseAttempt < 2 && jsonArray == null) {
+                try {
+                    jsonArray = JSONArray(textOutput)
+                } catch (e: Exception) {
+                    parseAttempt++
+                    if (parseAttempt >= 2) {
+                        throw RuntimeException("Invalid JSON response from Gemini: $textOutput", e)
+                    }
+                    textOutput = extractValidTextOutput(responseStr)
+                }
             }
 
-            val jsonArray = JSONArray(textOutput)
             val slides = mutableListOf<SlideData>()
-            for (i in 0 until jsonArray.length()) {
-                val obj = jsonArray.optJSONObject(i) ?: continue
+            for (i in 0 until (jsonArray?.length() ?: 0)) {
+                val obj = jsonArray!!.optJSONObject(i) ?: continue
                 val bodyText = obj.optString("body", "Body content")
                 val vText = obj.optString("voiceText", bodyText.take(80))
                 val bgMood = obj.optString("bgMood", niche)
 
-                val uniqueScene = SceneGenerator.pickUniquePreset(recentPresets, projectSeed + i)
-                securePrefs.addRecentPresetId(uniqueScene)
+                // Step 4: Scene Bug Fix
+                val geminiScene = obj.optString("bgScene", "")
+                val validPresets = SceneGenerator.presetNames
+                val assignedScene = if (validPresets.contains(geminiScene.uppercase())) {
+                    geminiScene.uppercase()
+                } else if (bgMood.isNotBlank()) {
+                    bgMood
+                } else {
+                    SceneGenerator.pickUniquePreset(recentPresets, projectSeed + i)
+                }
+                securePrefs.addRecentPresetId(assignedScene)
 
                 slides.add(
                     SlideData(
@@ -143,7 +184,7 @@ object AiGenerator {
                         body = bodyText,
                         voiceText = vText,
                         voiceStyle = obj.optString("voiceStyle", defaultStyle),
-                        bgScene = bgMood.ifBlank { uniqueScene },
+                        bgScene = assignedScene,
                         accentColor = obj.optString("accentColor", "#22D3EE"),
                         seed = projectSeed + i
                     )
@@ -156,5 +197,42 @@ object AiGenerator {
                 throw RuntimeException("Gemini returned empty slides array.")
             }
         }
+    }
+
+    private fun HttpURLConnection.errorStr(): String? {
+        return try {
+            errorStream?.bufferedReader()?.use { it.readText() }
+        } catch (_: Exception) {
+            null
+        }
+    }
+
+    private fun extractValidTextOutput(responseStr: String): String {
+        val root = JSONObject(responseStr)
+        val candidates = root.getJSONArray("candidates")
+        val content = candidates.getJSONObject(0).getJSONObject("content")
+        val parts = content.getJSONArray("parts")
+        
+        val sb = StringBuilder()
+        for (i in 0 until parts.length()) {
+            val part = parts.getJSONObject(i)
+            val isThought = part.optBoolean("thought", false)
+            if (!isThought && part.has("text")) {
+                sb.append(part.getString("text"))
+            }
+        }
+
+        var textOutput = sb.toString().trim()
+        if (textOutput.isEmpty() && parts.length() > 0) {
+            textOutput = parts.getJSONObject(0).optString("text", "").trim()
+        }
+
+        if (textOutput.startsWith("```json")) {
+            textOutput = textOutput.removePrefix("```json").removeSuffix("```").trim()
+        } else if (textOutput.startsWith("```")) {
+            textOutput = textOutput.removePrefix("```").removeSuffix("```").trim()
+        }
+
+        return textOutput
     }
 }
