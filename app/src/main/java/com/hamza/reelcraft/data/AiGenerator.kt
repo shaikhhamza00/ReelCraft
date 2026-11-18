@@ -65,47 +65,52 @@ object AiGenerator {
                 put("generationConfig", JSONObject().put("responseMimeType", "application/json").put("temperature", 0.9).put("topP", 0.95))
             }
 
-            val modelsToTry = listOf("gemini-1.5-flash", "gemini-pro", "gemini-1.5-pro", "gemini-1.5-flash-latest")
+            val apiVersions = listOf("v1", "v1beta")
+            val modelsToTry = listOf("gemini-1.5-flash", "gemini-1.5-pro", "gemini-pro", "gemini-1.5-flash-latest", "gemini-2.0-flash")
             var responseStr: String? = null
             var lastErrorMsg = ""
 
-            for (modelName in modelsToTry) {
-                try {
-                    Log.d(TAG, "Trying model: $modelName")
-                    val url = URL("https://generativelanguage.googleapis.com/v1beta/models/$modelName:generateContent?key=$apiKey")
-                    val connection = (url.openConnection() as HttpURLConnection).apply {
-                        requestMethod = "POST"
-                        setRequestProperty("Content-Type", "application/json; charset=utf-8")
-                        doOutput = true
-                        connectTimeout = 15000
-                        readTimeout = 15000
-                    }
+            for (apiVersion in apiVersions) {
+                for (modelName in modelsToTry) {
+                    try {
+                        Log.d(TAG, "Trying API version: $apiVersion, model: $modelName")
+                        val url = URL("https://generativelanguage.googleapis.com/$apiVersion/models/$modelName:generateContent?key=$apiKey")
+                        val connection = (url.openConnection() as HttpURLConnection).apply {
+                            requestMethod = "POST"
+                            setRequestProperty("Content-Type", "application/json; charset=utf-8")
+                            doOutput = true
+                            connectTimeout = 15000
+                            readTimeout = 15000
+                        }
 
-                    connection.outputStream.use { os ->
-                        val input = jsonBody.toString().toByteArray(Charsets.UTF_8)
-                        os.write(input, 0, input.size)
-                    }
+                        connection.outputStream.use { os ->
+                            val input = jsonBody.toString().toByteArray(Charsets.UTF_8)
+                            os.write(input, 0, input.size)
+                        }
 
-                    val responseCode = connection.responseCode
-                    Log.i(TAG, "Model $modelName response code: $responseCode")
-                    if (responseCode == HttpURLConnection.HTTP_OK) {
-                        val responseStream = BufferedReader(InputStreamReader(connection.inputStream, Charsets.UTF_8))
-                        responseStr = responseStream.readText()
-                        responseStream.close()
-                        break
-                    } else {
-                        val errorStream = connection.errorStream?.bufferedReader()?.use { it.readText() } ?: "No error stream"
-                        lastErrorMsg = "HTTP $responseCode: $errorStream"
-                        Log.e(TAG, "Model $modelName failed: $lastErrorMsg")
+                        val responseCode = connection.responseCode
+                        Log.i(TAG, "API $apiVersion / Model $modelName response code: $responseCode")
+                        if (responseCode == HttpURLConnection.HTTP_OK) {
+                            val responseStream = BufferedReader(InputStreamReader(connection.inputStream, Charsets.UTF_8))
+                            responseStr = responseStream.readText()
+                            responseStream.close()
+                            Log.i(TAG, "Success with API $apiVersion and model $modelName")
+                            break
+                        } else {
+                            val errorStream = connection.errorStream?.bufferedReader()?.use { it.readText() } ?: "No error stream"
+                            lastErrorMsg = "API $apiVersion / Model $modelName (HTTP $responseCode): $errorStream"
+                            Log.e(TAG, lastErrorMsg)
+                        }
+                    } catch (e: Exception) {
+                        lastErrorMsg = "API $apiVersion / Model $modelName Exception: ${e.message}"
+                        Log.e(TAG, lastErrorMsg, e)
                     }
-                } catch (e: Exception) {
-                    lastErrorMsg = e.message ?: "Unknown exception"
-                    Log.e(TAG, "Exception trying model $modelName", e)
                 }
+                if (!responseStr.isNullOrBlank()) break
             }
 
             if (responseStr.isNullOrBlank()) {
-                throw RuntimeException("All Gemini models failed. Last error: $lastErrorMsg")
+                throw RuntimeException("All Gemini API versions and models failed. Last error: $lastErrorMsg")
             }
 
             val root = JSONObject(responseStr)
