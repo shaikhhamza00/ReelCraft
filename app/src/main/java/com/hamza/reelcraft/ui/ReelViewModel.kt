@@ -75,8 +75,16 @@ class ReelViewModel(application: Application) : AndroidViewModel(application) {
 
     fun generateSlides(onComplete: () -> Unit) {
         isGenerating = true
+        exportStatus = "Generating script with Gemini..."
         viewModelScope.launch {
-            slides = AiGenerator.generateSlidesForTopic(getApplication(), selectedNiche, topicText, selectedApiKey)
+            try {
+                slides = AiGenerator.generateSlidesForTopic(getApplication(), selectedNiche, topicText, selectedApiKey)
+                exportStatus = "Script generated successfully!"
+            } catch (e: Exception) {
+                Log.e("ReelViewModel", "Generation failed", e)
+                exportStatus = "Error: ${e.message ?: "Generation failed"}"
+                slides = emptyList()
+            }
             isGenerating = false
             onComplete()
         }
