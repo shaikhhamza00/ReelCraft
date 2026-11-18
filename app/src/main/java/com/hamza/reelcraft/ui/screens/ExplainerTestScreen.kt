@@ -13,32 +13,71 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.hamza.reelcraft.data.AiGenerator
+import com.hamza.reelcraft.model.SlideData
 import com.hamza.reelcraft.render.ExplainerRenderer
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import kotlin.system.measureTimeMillis
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ExplainerTestScreen(onBack: () -> Unit) {
-    val propTypes = listOf("CLOCK", "CALENDAR", "DIGITAL_PHONE", "MAP_SLICES", "COUNTER_NUMBER", "BAR_COMPARISON")
-    var selectedProp by remember { mutableStateOf("CLOCK") }
+    val context = LocalContext.current
+    val coroutineScope = rememberCoroutineScope()
+
+    var topicInput by remember { mutableStateOf("Time zones kyun bane") }
+    var selectedNiche by remember { mutableStateOf("Facts") }
+    var isGenerating by remember { mutableStateOf(false) }
+
+    var generatedSlides by remember { mutableStateOf<List<SlideData>>(emptyList()) }
+    var currentSceneIndex by remember { mutableStateOf(0) }
     var progress by remember { mutableStateOf(0.5f) }
-
-    val sampleCaption = "Time zones were created in 1884 to synchronize global railway schedules."
-    val highlightWords = listOf("1884", "railway")
-
     var renderTimeMs by remember { mutableStateOf(0L) }
-    val bitmap = remember(selectedProp, progress) {
+
+    // Initial load with default topic
+    LaunchedEffect(Unit) {
+        isGenerating = true
+        withContext(Dispatchers.IO) {
+            val slides = AiGenerator.generateSlidesForTopic(context, selectedNiche, topicInput, "")
+            withContext(Dispatchers.Main) {
+                generatedSlides = slides
+                isGenerating = false
+            }
+        }
+    }
+
+    val currentSlide = generatedSlides.getOrNull(currentSceneIndex)
+    val captionText = currentSlide?.voiceText ?: currentSlide?.body ?: "Enter a topic to generate dynamic explainer scenes."
+    val highlightWords = currentSlide?.emphasisWords ?: emptyList()
+
+    // Map topic / slide content to appropriate prop type dynamically
+    val propType = remember(captionText) {
+        val q = captionText.lowercase()
+        when {
+            q.contains("time") || q.contains("baje") || q.contains("ghanta") || q.contains("hour") -> "CLOCK"
+            q.contains("date") || q.contains("saal") || q.contains("year") || q.contains("1884") -> "CALENDAR"
+            q.contains("phone") || q.contains("screen") || q.contains("mobile") -> "DIGITAL_PHONE"
+            q.contains("map") || q.contains("dunya") || q.contains("global") || q.contains("region") -> "MAP_SLICES"
+            q.contains("log") || q.contains("percent") || q.contains("aadad") || q.contains("bar") -> "COUNTER_NUMBER"
+            else -> "BAR_COMPARISON"
+        }
+    }
+
+    val bitmap = remember(currentSlide, progress, propType) {
         val bmp = Bitmap.createBitmap(360, 640, Bitmap.Config.ARGB_8888)
         val canvas = Canvas(bmp)
         renderTimeMs = measureTimeMillis {
             ExplainerRenderer.renderExplainerScene(
                 canvas = canvas,
-                captionText = sampleCaption,
+                captionText = captionText,
                 highlightWords = highlightWords,
-                propType = selectedProp,
+                propType = propType,
                 propParamValue = progress,
                 progress = progress
             )
@@ -49,7 +88,7 @@ fun ExplainerTestScreen(onBack: () -> Unit) {
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Explainer Mode POC (Captions & Props)") },
+                title = { Text("Explainer Mode (Dynamic Input)") },
                 navigationIcon = {
                     TextButton(onClick = onBack) { Text("Back", color = Color.White) }
                 },
@@ -65,51 +104,100 @@ fun ExplainerTestScreen(onBack: () -> Unit) {
                 .padding(16.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
+            // Topic Input Bar
+            OutlinedTextField(
+                value = topicInput,
+                onValueChange = { topicInput = it },
+                label = { Text("Enter Explainer Topic") },
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedBorderColor = Color.Cyan,
+                    unfocusedBorderColor = Color.Gray,
+                    focusedLabelColor = Color.Cyan,
+                    unfocusedTextColor = Color.White,
+                    focusedTextColor = Color.White
+                ),
+                modifier = Modifier.fillMaxWidth()
+            )
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            Button(
+                onClick = {
+                    isGenerating = true
+                    coroutineScope.launch(Dispatchers.IO) {
+                        val slides = AiGenerator.generateSlidesForTopic(context, selectedNiche, topicInput, "")
+                        withContext(Dispatchers.Main) {
+                            generatedSlides = slides
+                            currentSceneIndex = 0
+                            isGenerating = false
+                        }
+                    }
+                },
+                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF3B82F6)),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                if (isGenerating) {
+                    CircularProgressIndicator(modifier = Modifier.size(20.dp), color = Color.White)
+                } else {
+                    Text("🚀 Generate Dynamic Explainer Scenes", fontWeight = FontWeight.Bold, color = Color.White)
+                }
+            }
+
+            Spacer(modifier = Modifier.height(8.dp))
+
             // Frame render time info
             Text(
-                text = "⚡ Frame Render Time: ${renderTimeMs}ms (< 33ms target)",
+                text = "⚡ Frame Render Time: ${renderTimeMs}ms (< 33ms target) | Prop: $propType",
                 color = if (renderTimeMs <= 33) Color(0xFF34D399) else Color(0xFFEF4444),
                 fontWeight = FontWeight.Bold,
-                fontSize = 14.sp
+                fontSize = 13.sp
             )
-            Spacer(modifier = Modifier.height(12.dp))
+
+            Spacer(modifier = Modifier.height(8.dp))
 
             // Preview Card
             Card(
                 colors = CardDefaults.cardColors(containerColor = Color(0xFF1E293B)),
                 modifier = Modifier
-                    .width(300.dp)
-                    .height(480.dp)
+                    .width(260.dp)
+                    .height(380.dp)
             ) {
                 Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Image(
-                        bitmap = bitmap.asImageBitmap(),
-                        contentDescription = "Explainer Preview",
-                        modifier = Modifier.fillMaxSize()
-                    )
+                    if (isGenerating) {
+                        CircularProgressIndicator(color = Color.Cyan)
+                    } else {
+                        Image(
+                            bitmap = bitmap.asImageBitmap(),
+                            contentDescription = "Explainer Preview",
+                            modifier = Modifier.fillMaxSize()
+                        )
+                    }
                 }
             }
 
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(12.dp))
 
-            // Prop Selector Chips
-            LazyRow(
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                items(propTypes) { prop ->
-                    FilterChip(
-                        selected = selectedProp == prop,
-                        onClick = { selectedProp = prop },
-                        label = { Text(prop) }
-                    )
+            // Scene / Slide Selector Chips
+            if (generatedSlides.isNotEmpty()) {
+                Text("Scenes (${currentSceneIndex + 1}/${generatedSlides.size}):", color = Color.LightGray, fontSize = 12.sp)
+                LazyRow(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    items(generatedSlides.indices.toList()) { idx ->
+                        FilterChip(
+                            selected = currentSceneIndex == idx,
+                            onClick = { currentSceneIndex = idx },
+                            label = { Text("Scene ${idx + 1}") }
+                        )
+                    }
                 }
             }
 
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(8.dp))
 
             // Animation Progress Slider
-            Text("Animation / Time Progress: ${(progress * 100).toInt()}%", color = Color.LightGray, fontSize = 12.sp)
+            Text("Animation Progress: ${(progress * 100).toInt()}%", color = Color.LightGray, fontSize = 12.sp)
             Slider(
                 value = progress,
                 onValueChange = { progress = it },
