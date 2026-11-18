@@ -23,6 +23,9 @@ object AiGenerator {
             throw IllegalArgumentException("API key sahi nahi ya missing hai. Settings mein valid Gemini API key enter karein.")
         }
 
+        // Force IPv4 stack to prevent IPv6 connection failures on certain Android emulators/networks
+        System.setProperty("java.net.preferIPv4Stack", "true")
+
         val securePrefs = SecurePreferences(context)
         val recentPresets = securePrefs.getRecentPresetIds()
         val projectSeed = System.currentTimeMillis()
@@ -87,7 +90,7 @@ object AiGenerator {
                 }
 
                 var attempt = 0
-                val maxAttempts = 3 // For 503/429 exponential backoff: 2s, 4s, 8s (3 attempts)
+                val maxAttempts = 3
                 var successForModel = false
 
                 while (attempt < maxAttempts && !successForModel) {
@@ -99,7 +102,7 @@ object AiGenerator {
                             setRequestProperty("Content-Type", "application/json; charset=utf-8")
                             doOutput = true
                             connectTimeout = 15000
-                            readTimeout = 45000 // 45s read timeout per attempt
+                            readTimeout = 45000
                         }
 
                         connection.outputStream.use { os ->
@@ -122,7 +125,6 @@ object AiGenerator {
                             lastErrorMsg = "Model $modelName failed with HTTP $responseCode: $errorStream"
                             Log.e(TAG, lastErrorMsg)
 
-                            // Error Handling (Step 2)
                             if (responseCode == 400) {
                                 ModelResolver.removeCachedModel(context, modelName)
                                 throw IllegalArgumentException("API key sahi nahi hai ya request galat hai (HTTP 400): $errorStream")
@@ -134,7 +136,7 @@ object AiGenerator {
                             if (responseCode == 404) {
                                 ModelResolver.removeCachedModel(context, modelName)
                                 Log.w(TAG, "Model $modelName returned 404. Blacklisted from cache and moving to next model.")
-                                break // skip immediately to next model
+                                break
                             }
                             if (responseCode == 503 || responseCode == 429) {
                                 val backoffMs = when (attempt) {
@@ -142,13 +144,13 @@ object AiGenerator {
                                     1 -> 4000L
                                     else -> 8000L
                                 }
-                                Log.w(TAG, "Model $modelName returned $responseCode. Retrying in ${backoffMs}ms (attempt ${attempt + 1}/$maxAttempts)...")
+                                Log.w(TAG, "Model $modelName returned $responseCode. Retrying in ${backoffMs}ms...")
                                 delay(backoffMs)
                                 attempt++
                                 continue
                             }
                             if (responseCode >= 500) {
-                                break // try next model
+                                break
                             } else {
                                 throw RuntimeException(lastErrorMsg)
                             }
@@ -157,11 +159,9 @@ object AiGenerator {
                         lastErrorMsg = "Timeout on model $modelName on attempt ${attempt + 1}: ${e.message}"
                         Log.w(TAG, lastErrorMsg)
                         if (attempt == 0) {
-                            // Timeout: try same model 1 more time
                             attempt++
                             continue
                         } else {
-                            // After 2nd timeout attempt, move to next model
                             break
                         }
                     } catch (e: Exception) {
@@ -174,9 +174,8 @@ object AiGenerator {
                 if (!responseStr.isNullOrBlank()) break
             }
 
-            // Step 4: Aakhri Fallback if all models fail
             val rawSlides = if (responseStr.isNullOrBlank()) {
-                Log.w(TAG, "All Gemini models/attempts failed. Server masroof hai. Using offline varied fallback slides. Last error: $lastErrorMsg")
+                Log.w(TAG, "All Gemini models/attempts failed due to connection/timeout. Server masroof hai. Using offline varied fallback slides. Last error: $lastErrorMsg")
                 getOfflineFallbackSlides(niche, topic)
             } else {
                 var textOutput = extractValidTextOutput(responseStr)
