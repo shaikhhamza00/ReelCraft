@@ -2,7 +2,6 @@ package com.hamza.reelcraft.data
 
 import android.content.Context
 import android.util.Log
-import org.json.JSONArray
 import org.json.JSONObject
 import java.io.BufferedReader
 import java.io.InputStreamReader
@@ -16,7 +15,7 @@ object ModelResolver {
     private const val KEY_TIME = "cached_model_time"
     private const val CACHE_DURATION_MS = 24 * 60 * 60 * 1000L // 24 hours
 
-    val FALLBACK_MODELS = listOf("gemini-flash-latest", "gemini-2.5-flash", "gemini-2.5-flash-lite")
+    val FALLBACK_MODELS = listOf("gemini-3.8-flash", "gemini-3.5-flash-lite", "gemini-flash-latest", "gemini-1.5-flash")
 
     suspend fun resolveModel(context: Context, apiKey: String): String {
         val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)

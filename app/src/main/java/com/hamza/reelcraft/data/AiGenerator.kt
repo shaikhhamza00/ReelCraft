@@ -120,8 +120,8 @@ object AiGenerator {
                                 attempt++
                                 continue
                             }
-                            // Only 404 and 503 move to next model
-                            if (responseCode == 404 || responseCode == 503) {
+                            // 404, 503, or other server errors move to next model / retry
+                            if (responseCode == 404 || responseCode == 503 || responseCode >= 500) {
                                 break // try next model
                             } else {
                                 throw RuntimeException(lastErrorMsg)
@@ -131,6 +131,7 @@ object AiGenerator {
                         if (e is IllegalArgumentException || e is SecurityException) throw e
                         lastErrorMsg = "Exception on model $modelName: ${e.message}"
                         Log.e(TAG, lastErrorMsg, e)
+                        // On timeout/socket exception, try next model
                         break
                     }
                 }
@@ -141,7 +142,6 @@ object AiGenerator {
                 throw RuntimeException("Tamam Gemini models fail ho gaye hain. Asal wajah: $lastErrorMsg")
             }
 
-            // Step 3: Parsing response, taking parts where thought is not true
             var textOutput = extractValidTextOutput(responseStr)
 
             var jsonArray: JSONArray? = null
@@ -165,7 +165,6 @@ object AiGenerator {
                 val vText = obj.optString("voiceText", bodyText.take(80))
                 val bgMood = obj.optString("bgMood", niche)
 
-                // Step 4: Scene Bug Fix
                 val geminiScene = obj.optString("bgScene", "")
                 val validPresets = SceneGenerator.presetNames
                 val assignedScene = if (validPresets.contains(geminiScene.uppercase())) {
