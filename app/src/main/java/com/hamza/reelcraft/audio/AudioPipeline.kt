@@ -12,11 +12,8 @@ class AudioPipeline(private val context: Context) {
 
     private val ttsProvider = AndroidTtsProvider(context)
 
-    /**
-     * Step B & C: Synthesize voice for each slide, calculate precise duration from WAV length,
-     * and update slide duration.
-     */
     suspend fun prepareAudioForSlides(slides: List<SlideData>, language: String): List<Pair<SlideData, File?>> {
+        Log.i(TAG, "prepareAudioForSlides starting with ${slides.size} slides, language: $language")
         val results = mutableListOf<Pair<SlideData, File?>>()
 
         for ((index, slide) in slides.withIndex()) {
@@ -26,15 +23,15 @@ class AudioPipeline(private val context: Context) {
             val startTime = System.currentTimeMillis()
             val success = ttsProvider.synthesize(textToSpeech, slide.voiceStyle, language, audioFile)
             val synthTime = System.currentTimeMillis() - startTime
-            Log.i(TAG, "PERFORMANCE: TTS synthesis for slide $index took $synthTime ms")
+            Log.i(TAG, "PERFORMANCE: TTS synthesis for slide $index success=$success took $synthTime ms")
 
             val finalAudioFile = if (success && audioFile.exists() && audioFile.length() > 44) {
                 audioFile
             } else {
+                Log.w(TAG, "Audio file invalid or synthesis failed for slide $index")
                 null
             }
 
-            // Step C: Calculate duration from WAV file length (16kHz 16-bit mono = 32000 bytes/sec)
             val calculatedDuration = if (finalAudioFile != null) {
                 val pcmSize = finalAudioFile.length() - 44
                 val durationMs = (pcmSize * 1000L) / 32000L
@@ -47,10 +44,12 @@ class AudioPipeline(private val context: Context) {
             results.add(updatedSlide to finalAudioFile)
         }
 
+        Log.i(TAG, "prepareAudioForSlides completed successfully for ${results.size} slides")
         return results
     }
 
     fun shutdown() {
+        Log.i(TAG, "AudioPipeline shutting down")
         ttsProvider.shutdown()
     }
 }
