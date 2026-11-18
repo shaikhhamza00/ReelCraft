@@ -15,7 +15,7 @@ object ModelResolver {
     private const val KEY_TIME = "cached_model_time"
     private const val CACHE_DURATION_MS = 24 * 60 * 60 * 1000L // 24 hours
 
-    val FALLBACK_MODELS = listOf("gemini-3.8-flash", "gemini-3.5-flash-lite", "gemini-flash-latest", "gemini-1.5-flash")
+    val FALLBACK_MODELS = listOf("gemini-3.8-flash", "gemini-3.7-flash", "gemini-3.6-flash", "gemini-3.5-flash-lite", "gemini-flash-latest")
 
     suspend fun resolveModel(context: Context, apiKey: String): String {
         val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
@@ -45,10 +45,13 @@ object ModelResolver {
         return FALLBACK_MODELS.first()
     }
 
-    fun invalidateCache(context: Context) {
+    fun removeCachedModel(context: Context, badModel: String) {
         val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-        prefs.edit().clear().apply()
-        Log.i(TAG, "Model cache invalidated")
+        val cached = prefs.getString(KEY_MODEL, null)
+        if (cached == badModel) {
+            prefs.edit().remove(KEY_MODEL).remove(KEY_TIME).apply()
+            Log.w(TAG, "Removed blacklisted bad model from cache: $badModel")
+        }
     }
 
     private fun fetchModelsFromApi(apiKey: String): String? {
@@ -67,7 +70,9 @@ object ModelResolver {
 
             val root = JSONObject(responseStr)
             val models = root.optJSONArray("models") ?: return null
-            val validModels = mutableListOf<String>()
+            val flashModels = mutableListOf<String>()
+            val liteModels = mutableListOf<String>()
+            val latestModels = mutableListOf<String>()
 
             for (i in 0 until models.length()) {
                 val m = models.optJSONObject(i) ?: continue
@@ -86,14 +91,21 @@ object ModelResolver {
 
                 if (supportsGenerate) {
                     val lower = name.lowercase()
-                    val excluded = listOf("lite", "image", "tts", "live", "audio", "robotics", "embedding", "imagen", "veo", "lyria")
+                    val excluded = listOf("image", "tts", "live", "audio", "robotics", "embedding", "imagen", "veo", "lyria")
                     if (lower.contains("flash") && excluded.none { lower.contains(it) }) {
-                        validModels.add(name)
+                        if (lower.contains("latest")) {
+                            latestModels.add(name)
+                        } else if (lower.contains("lite")) {
+                            liteModels.add(name)
+                        } else {
+                            flashModels.add(name)
+                        }
                     }
                 }
             }
 
-            validModels.sortWith(Comparator { a, b ->
+            // Sort flash models by version descending (newest first)
+            flashModels.sortWith(Comparator { a, b ->
                 val verA = extractVersion(a)
                 val verB = extractVersion(b)
                 if (verA != verB) {
@@ -105,7 +117,13 @@ object ModelResolver {
                 }
             })
 
-            return validModels.firstOrNull()
+            // Combine: sorted flash first, then lite, then latest at the very end
+            val combined = mutableListOf<String>()
+            combined.addAll(flashModels)
+            combined.addAll(liteModels)
+            combined.addAll(latestModels)
+
+            return combined.firstOrNull()
         }
         return null
     }
