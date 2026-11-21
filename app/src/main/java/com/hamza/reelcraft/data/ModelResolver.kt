@@ -8,6 +8,14 @@ import java.io.InputStreamReader
 import java.net.HttpURLConnection
 import java.net.URL
 
+data class ModelListInfo(
+    val flashModelsCount: Int,
+    val selectedModel: String?,
+    val allFlashModels: List<String>,
+    val httpCode: Int,
+    val errorBody: String? = null
+)
+
 object ModelResolver {
     private const val TAG = "ModelResolver"
     private const val PREFS_NAME = "gemini_model_cache"
@@ -29,14 +37,14 @@ object ModelResolver {
         }
 
         try {
-            val resolved = fetchModelsFromApi(apiKey)
-            if (!resolved.isNullOrBlank()) {
+            val info = fetchModelsFromApi(apiKey)
+            if (info.selectedModel != null) {
                 prefs.edit()
-                    .putString(KEY_MODEL, resolved)
+                    .putString(KEY_MODEL, info.selectedModel)
                     .putLong(KEY_TIME, now)
                     .apply()
-                Log.i(TAG, "Resolved and cached Gemini model: $resolved")
-                return resolved
+                Log.i(TAG, "Resolved and cached Gemini model: ${info.selectedModel}")
+                return info.selectedModel
             }
         } catch (e: Exception) {
             Log.e(TAG, "Failed to fetch model list from API, using fallback", e)
@@ -54,10 +62,14 @@ object ModelResolver {
         }
     }
 
-    private fun fetchModelsFromApi(apiKey: String): String? {
-        val url = URL("https://generativelanguage.googleapis.com/v1beta/models?pageSize=100&key=$apiKey")
+    fun fetchModelsFromApi(apiKey: String): ModelListInfo {
+        if (apiKey.isBlank()) {
+            return ModelListInfo(0, null, emptyList(), 400, "API key is blank")
+        }
+        val url = URL("https://generativelanguage.googleapis.com/v1beta/models?pageSize=100")
         val connection = (url.openConnection() as HttpURLConnection).apply {
             requestMethod = "GET"
+            setRequestProperty("x-goog-api-key", apiKey)
             connectTimeout = 15000
             readTimeout = 15000
         }
@@ -69,7 +81,7 @@ object ModelResolver {
             reader.close()
 
             val root = JSONObject(responseStr)
-            val models = root.optJSONArray("models") ?: return null
+            val models = root.optJSONArray("models") ?: return ModelListInfo(0, null, emptyList(), responseCode, null)
             val flashModels = mutableListOf<String>()
             val liteModels = mutableListOf<String>()
             val latestModels = mutableListOf<String>()
@@ -104,7 +116,6 @@ object ModelResolver {
                 }
             }
 
-            // Sort flash models by version descending (newest first)
             flashModels.sortWith(Comparator { a, b ->
                 val verA = extractVersion(a)
                 val verB = extractVersion(b)
@@ -117,15 +128,32 @@ object ModelResolver {
                 }
             })
 
-            // Combine: sorted flash first, then lite, then latest at the very end
             val combined = mutableListOf<String>()
             combined.addAll(flashModels)
             combined.addAll(liteModels)
             combined.addAll(latestModels)
 
-            return combined.firstOrNull()
+            return ModelListInfo(
+                flashModelsCount = combined.size,
+                selectedModel = combined.firstOrNull(),
+                allFlashModels = combined,
+                httpCode = responseCode,
+                errorBody = null
+            )
+        } else {
+            val errStr = try {
+                connection.errorStream?.bufferedReader()?.use { it.readText() }
+            } catch (_: Exception) {
+                null
+            }
+            return ModelListInfo(
+                flashModelsCount = 0,
+                selectedModel = null,
+                allFlashModels = emptyList(),
+                httpCode = responseCode,
+                errorBody = errStr ?: "HTTP $responseCode"
+            )
         }
-        return null
     }
 
     private fun extractVersion(modelName: String): Float {

@@ -21,6 +21,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.hamza.reelcraft.data.AiGenerator
+import com.hamza.reelcraft.data.SecurePreferences
 import com.hamza.reelcraft.model.SceneGenerator
 import com.hamza.reelcraft.model.SlideData
 import com.hamza.reelcraft.render.SceneRenderer
@@ -37,7 +38,8 @@ data class ThemePreviewItem(
 
 data class ScriptDebugItem(
     val topic: String,
-    val slides: List<SlideData>
+    val slides: List<SlideData>,
+    val statusMsg: String? = null
 )
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -63,6 +65,7 @@ fun ThemeTestScreen(onBack: () -> Unit) {
 
     val previews = remember { mutableStateListOf<ThemePreviewItem>() }
     val scriptDebugItems = remember { mutableStateListOf<ScriptDebugItem>() }
+    var apiKeyStatus by remember { mutableStateOf("") }
 
     LaunchedEffect(Unit) {
         // Load theme previews
@@ -83,13 +86,34 @@ fun ThemeTestScreen(onBack: () -> Unit) {
         previews.clear()
         previews.addAll(list)
 
-        // Load 6 new script debug items via AiGenerator fallback scripts
+        // Load 6 new script debug items via AiGenerator
         val scriptList = mutableListOf<ScriptDebugItem>()
         withContext(Dispatchers.IO) {
+            val activeKey = SecurePreferences(context).getActiveApiKey()
+            if (activeKey.isBlank()) {
+                withContext(Dispatchers.Main) {
+                    apiKeyStatus = "Settings mein key daalo (Using offline fallback scripts)"
+                }
+            }
+
             for (t in newTopics) {
-                // Use reflection / helper or fallback generator
-                val slides = AiGenerator.generateSlidesForTopic(context, t, t, "")
-                scriptList.add(ScriptDebugItem(t, slides))
+                try {
+                    val res = AiGenerator.generateSlidesForTopic(
+                        context = context,
+                        niche = t,
+                        topic = t,
+                        apiKey = activeKey,
+                        allowOfflineFallback = true
+                    )
+                    val statusStr = if (res.usedOffline) {
+                        "Offline script: ${res.errorMessage ?: "API Key missing"}"
+                    } else {
+                        "Generated via ${res.modelUsed} (${res.latencyMs}ms)"
+                    }
+                    scriptList.add(ScriptDebugItem(t, res.slides, statusStr))
+                } catch (e: Exception) {
+                    scriptList.add(ScriptDebugItem(t, emptyList(), "Error: ${e.message}"))
+                }
             }
         }
         scriptDebugItems.clear()
@@ -184,6 +208,20 @@ fun ThemeTestScreen(onBack: () -> Unit) {
                     }
                 }
             } else {
+                if (apiKeyStatus.isNotBlank()) {
+                    Surface(
+                        color = Color(0xFF334155),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text(
+                            text = "⚠️ $apiKeyStatus",
+                            color = Color(0xFFFDE047),
+                            fontSize = 12.sp,
+                            modifier = Modifier.padding(8.dp)
+                        )
+                    }
+                }
+
                 if (scriptDebugItems.isEmpty()) {
                     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                         CircularProgressIndicator(color = Color.Cyan)
@@ -210,6 +248,13 @@ fun ThemeTestScreen(onBack: () -> Unit) {
                                         fontWeight = FontWeight.Bold,
                                         color = Color.Cyan
                                     )
+                                    if (!item.statusMsg.isNullOrBlank()) {
+                                        Text(
+                                            text = item.statusMsg,
+                                            fontSize = 12.sp,
+                                            color = Color.Yellow
+                                        )
+                                    }
                                     Spacer(modifier = Modifier.height(8.dp))
                                     item.slides.forEachIndexed { sIdx, slide ->
                                         HorizontalDivider(color = Color(0xFF334155), thickness = 0.5.dp)

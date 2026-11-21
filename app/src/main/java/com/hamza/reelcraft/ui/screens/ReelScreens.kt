@@ -301,6 +301,7 @@ fun SettingsScreen(viewModel: ReelViewModel, onBack: () -> Unit) {
         Column(
             modifier = Modifier
                 .fillMaxSize()
+                .verticalScroll(rememberScrollState())
                 .padding(horizontal = 20.dp)
         ) {
             Spacer(modifier = Modifier.height(16.dp))
@@ -370,6 +371,120 @@ fun SettingsScreen(viewModel: ReelViewModel, onBack: () -> Unit) {
                     Text("Save")
                 }
             }
+
+            Spacer(modifier = Modifier.height(28.dp))
+            SectionHeader(title = "Gemini API Diagnostics & Testing")
+            Spacer(modifier = Modifier.height(12.dp))
+
+            // Step 7: Test Gemini & Full Script Buttons
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                Button(
+                    onClick = { viewModel.runQuickGeminiTest() },
+                    enabled = !viewModel.isTestingGemini,
+                    modifier = Modifier.weight(1f),
+                    shape = RoundedCornerShape(14.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2563EB))
+                ) {
+                    if (viewModel.isTestingGemini) {
+                        CircularProgressIndicator(modifier = Modifier.size(18.dp), color = Color.White)
+                    } else {
+                        Text("🧪 Test Gemini API", fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                    }
+                }
+
+                Button(
+                    onClick = { viewModel.runFullScriptTest() },
+                    enabled = !viewModel.isTestingScript,
+                    modifier = Modifier.weight(1f),
+                    shape = RoundedCornerShape(14.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF7C3AED))
+                ) {
+                    if (viewModel.isTestingScript) {
+                        CircularProgressIndicator(modifier = Modifier.size(18.dp), color = Color.White)
+                    } else {
+                        Text("📜 Poori Script Test", fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                    }
+                }
+            }
+
+            // Diagnostic Results Cards
+            viewModel.quickTestResult?.let { res ->
+                Spacer(modifier = Modifier.height(14.dp))
+                Card(
+                    colors = CardDefaults.cardColors(containerColor = Color(0xFF1E293B)),
+                    shape = RoundedCornerShape(16.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(modifier = Modifier.padding(14.dp)) {
+                        Text(
+                            text = "📊 Quick API Diagnostic Result",
+                            style = MaterialTheme.typography.titleMedium,
+                            color = Color.Cyan,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(text = "• Flash Models Found: ${res.flashModelsCount}", color = Color.White, fontSize = 13.sp)
+                        Text(text = "• Selected Model: ${res.selectedModelFromApi ?: "None"}", color = Color.White, fontSize = 13.sp)
+                        Text(text = "• Model Used: ${res.modelUsed ?: "N/A"}", color = Color.White, fontSize = 13.sp)
+                        Text(
+                            text = "• HTTP Code: ${res.httpCode}",
+                            color = if (res.httpCode == 200) Color(0xFF34D399) else Color(0xFFEF4444),
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Text(text = "• Finish Reason: ${res.finishReason ?: "N/A"}", color = Color.White, fontSize = 13.sp)
+                        Text(text = "• Latency: ${res.latencyMs} ms", color = Color.White, fontSize = 13.sp)
+                        Spacer(modifier = Modifier.height(6.dp))
+                        Text(
+                            text = "Response / Error Body (first 200 chars):\n${res.responseTextOrError}",
+                            color = Color.LightGray,
+                            fontSize = 12.sp
+                        )
+                    }
+                }
+            }
+
+            viewModel.fullScriptTestResult?.let { res ->
+                Spacer(modifier = Modifier.height(14.dp))
+                Card(
+                    colors = CardDefaults.cardColors(containerColor = Color(0xFF1E293B)),
+                    shape = RoundedCornerShape(16.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(modifier = Modifier.padding(14.dp)) {
+                        Text(
+                            text = "📜 Full Script Test Result",
+                            style = MaterialTheme.typography.titleMedium,
+                            color = Color(0xFFA78BFA),
+                            fontWeight = FontWeight.Bold
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(text = "• Slides Generated: ${res.slides.size}", color = Color.White, fontSize = 13.sp)
+                        Text(
+                            text = "• Used Offline: ${res.usedOffline}",
+                            color = if (res.usedOffline) Color(0xFFFACC15) else Color(0xFF34D399),
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Text(text = "• Model Used: ${res.modelUsed ?: "N/A"}", color = Color.White, fontSize = 13.sp)
+                        Text(text = "• HTTP Code: ${res.httpCode ?: "N/A"}", color = Color.White, fontSize = 13.sp)
+                        Text(text = "• Finish Reason: ${res.finishReason ?: "N/A"}", color = Color.White, fontSize = 13.sp)
+                        Text(text = "• Latency: ${res.latencyMs} ms", color = Color.White, fontSize = 13.sp)
+                        if (!res.errorMessage.isNullOrBlank()) {
+                            Text(
+                                text = "• Error Message: ${res.errorMessage}",
+                                color = Color(0xFFEF4444),
+                                fontSize = 12.sp
+                            )
+                        }
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(32.dp))
         }
     }
 }
@@ -557,7 +672,58 @@ fun CreateScreen(
                 }
             }
 
-            Spacer(modifier = Modifier.height(32.dp))
+            Spacer(modifier = Modifier.height(16.dp))
+
+            // Gemini Error Card & Fallback Options
+            if (viewModel.slides.isEmpty() && (viewModel.exportStatus.contains("fail") || viewModel.exportStatus.contains("Error") || viewModel.lastGenerationResult?.errorMessage != null)) {
+                Surface(
+                    shape = RoundedCornerShape(16.dp),
+                    color = Color(0xFF451A03),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(modifier = Modifier.padding(16.dp)) {
+                        Text(
+                            text = "❌ ${viewModel.lastGenerationResult?.errorMessage ?: viewModel.exportStatus}",
+                            color = Color(0xFFFDE047),
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Spacer(modifier = Modifier.height(12.dp))
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Button(
+                                onClick = {
+                                    viewModel.generateSlides(onComplete = {
+                                        if (viewModel.slides.isNotEmpty()) onNavigatePreview()
+                                    }, forceOffline = false)
+                                },
+                                colors = ButtonDefaults.buttonColors(containerColor = ReelPrimaryViolet),
+                                modifier = Modifier.weight(1f),
+                                shape = RoundedCornerShape(12.dp)
+                            ) {
+                                Text("Dobara koshish", fontSize = 12.sp)
+                            }
+                            Button(
+                                onClick = {
+                                    viewModel.generateSlides(onComplete = {
+                                        if (viewModel.slides.isNotEmpty()) onNavigatePreview()
+                                    }, forceOffline = true)
+                                },
+                                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF334155)),
+                                modifier = Modifier.weight(1f),
+                                shape = RoundedCornerShape(12.dp)
+                            ) {
+                                Text("Offline use karo", fontSize = 12.sp)
+                            }
+                        }
+                    }
+                }
+                Spacer(modifier = Modifier.height(16.dp))
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
         }
 
         // Sticky Bottom Generate Button
@@ -574,9 +740,11 @@ fun CreateScreen(
                     isLoading = viewModel.isGenerating,
                     enabled = isTopicValid,
                     onClick = {
-                        viewModel.generateSlides {
-                            onNavigatePreview()
-                        }
+                        viewModel.generateSlides(onComplete = {
+                            if (viewModel.slides.isNotEmpty()) {
+                                onNavigatePreview()
+                            }
+                        }, forceOffline = false)
                     },
                     modifier = Modifier.alpha(if (isTopicValid) 1f else 0.5f)
                 )
@@ -663,6 +831,36 @@ fun PreviewScreen(
             .background(ReelBackground)
     ) {
         ReelTopBar(title = "Preview", onBack = onBack)
+
+        val res = viewModel.lastGenerationResult
+        if (res?.usedOffline == true || viewModel.exportStatus.startsWith("Offline script")) {
+            Surface(
+                color = Color(0xFFB45309),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Text(
+                        text = "⚠️ Offline script (Gemini fail hua): ${res?.errorMessage ?: "Gemini error"}",
+                        color = Color.White,
+                        fontSize = 12.sp,
+                        modifier = Modifier.weight(1f)
+                    )
+                    TextButton(
+                        onClick = {
+                            viewModel.generateSlides(onComplete = {}, forceOffline = false)
+                        }
+                    ) {
+                        Text("Retry Online", color = Color.Yellow, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                    }
+                }
+            }
+        }
 
         Column(
             modifier = Modifier

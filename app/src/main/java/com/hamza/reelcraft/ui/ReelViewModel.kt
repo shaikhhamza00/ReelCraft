@@ -11,6 +11,8 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.hamza.reelcraft.audio.AudioPipeline
 import com.hamza.reelcraft.data.AiGenerator
+import com.hamza.reelcraft.data.GenerationResult
+import com.hamza.reelcraft.data.QuickTestResult
 import com.hamza.reelcraft.data.SecurePreferences
 import com.hamza.reelcraft.model.SlideData
 import com.hamza.reelcraft.model.Theme
@@ -38,6 +40,14 @@ class ReelViewModel(application: Application) : AndroidViewModel(application) {
     var isGenerating by mutableStateOf(false)
     var exportStatus by mutableStateOf("Ready")
     var exportedVideoFile by mutableStateOf<File?>(null)
+
+    // Gemini failures tracking & test states
+    var geminiConsecutiveFailures by mutableStateOf(0)
+    var lastGenerationResult by mutableStateOf<GenerationResult?>(null)
+    var quickTestResult by mutableStateOf<QuickTestResult?>(null)
+    var fullScriptTestResult by mutableStateOf<GenerationResult?>(null)
+    var isTestingGemini by mutableStateOf(false)
+    var isTestingScript by mutableStateOf(false)
 
     // Multi-style generation storage (Map of Style Name -> Video File)
     var stylePreviews by mutableStateOf<Map<String, File?>>(emptyMap())
@@ -73,20 +83,77 @@ class ReelViewModel(application: Application) : AndroidViewModel(application) {
         securePrefs.saveActiveApiKey(key)
     }
 
-    fun generateSlides(onComplete: () -> Unit) {
+    fun generateSlides(onComplete: () -> Unit = {}, forceOffline: Boolean = false) {
         isGenerating = true
         exportStatus = "Generating script with Gemini..."
         viewModelScope.launch {
             try {
-                slides = AiGenerator.generateSlidesForTopic(getApplication(), selectedNiche, topicText, selectedApiKey)
-                exportStatus = "Script generated successfully!"
+                val allowFallback = forceOffline || geminiConsecutiveFailures >= 1
+                val res = AiGenerator.generateSlidesForTopic(
+                    context = getApplication(),
+                    niche = selectedNiche,
+                    topic = topicText,
+                    apiKey = selectedApiKey,
+                    language = selectedLanguage,
+                    allowOfflineFallback = allowFallback
+                )
+                lastGenerationResult = res
+
+                if (res.slides.isNotEmpty()) {
+                    slides = res.slides
+                    if (res.usedOffline) {
+                        exportStatus = "Offline script (Gemini fail hua): ${res.errorMessage ?: "Unknown error"}"
+                    } else {
+                        exportStatus = "Script generated successfully! (${res.modelUsed ?: "Gemini"})"
+                        geminiConsecutiveFailures = 0
+                    }
+                } else {
+                    slides = emptyList()
+                    geminiConsecutiveFailures++
+                    exportStatus = "Gemini generation fail ho gaya: ${res.errorMessage ?: "Unknown error"}"
+                }
             } catch (e: Exception) {
                 Log.e("ReelViewModel", "Generation failed", e)
+                geminiConsecutiveFailures++
                 exportStatus = "Error: ${e.message ?: "Generation failed"}"
                 slides = emptyList()
             }
             isGenerating = false
             onComplete()
+        }
+    }
+
+    fun runQuickGeminiTest() {
+        isTestingGemini = true
+        viewModelScope.launch {
+            try {
+                quickTestResult = AiGenerator.runQuickTest(getApplication(), selectedApiKey)
+            } catch (e: Exception) {
+                Log.e("ReelViewModel", "Quick test failed", e)
+            } finally {
+                isTestingGemini = false
+            }
+        }
+    }
+
+    fun runFullScriptTest() {
+        isTestingScript = true
+        viewModelScope.launch {
+            try {
+                val testTopic = if (topicText.isNotBlank()) topicText else "Bhoot wali purani haveli"
+                fullScriptTestResult = AiGenerator.generateSlidesForTopic(
+                    context = getApplication(),
+                    niche = selectedNiche,
+                    topic = testTopic,
+                    apiKey = selectedApiKey,
+                    language = selectedLanguage,
+                    allowOfflineFallback = true
+                )
+            } catch (e: Exception) {
+                Log.e("ReelViewModel", "Full script test failed", e)
+            } finally {
+                isTestingScript = false
+            }
         }
     }
 

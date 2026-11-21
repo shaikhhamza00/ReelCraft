@@ -18,6 +18,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.hamza.reelcraft.data.AiGenerator
+import com.hamza.reelcraft.data.SecurePreferences
 import com.hamza.reelcraft.model.SlideData
 import com.hamza.reelcraft.render.ExplainerRenderer
 import kotlinx.coroutines.Dispatchers
@@ -34,6 +35,7 @@ fun ExplainerTestScreen(onBack: () -> Unit) {
     var topicInput by remember { mutableStateOf("Time zones kyun bane") }
     var selectedNiche by remember { mutableStateOf("Facts") }
     var isGenerating by remember { mutableStateOf(false) }
+    var errorMessage by remember { mutableStateOf<String?>(null) }
 
     var generatedSlides by remember { mutableStateOf<List<SlideData>>(emptyList()) }
     var currentSceneIndex by remember { mutableStateOf(0) }
@@ -44,10 +46,32 @@ fun ExplainerTestScreen(onBack: () -> Unit) {
     LaunchedEffect(Unit) {
         isGenerating = true
         withContext(Dispatchers.IO) {
-            val slides = AiGenerator.generateSlidesForTopic(context, selectedNiche, topicInput, "")
-            withContext(Dispatchers.Main) {
-                generatedSlides = slides
-                isGenerating = false
+            try {
+                val activeKey = SecurePreferences(context).getActiveApiKey()
+                if (activeKey.isBlank()) {
+                    withContext(Dispatchers.Main) {
+                        errorMessage = "Settings mein key daalo"
+                    }
+                }
+                val res = AiGenerator.generateSlidesForTopic(
+                    context = context,
+                    niche = selectedNiche,
+                    topic = topicInput,
+                    apiKey = activeKey,
+                    allowOfflineFallback = true
+                )
+                withContext(Dispatchers.Main) {
+                    generatedSlides = res.slides
+                    if (res.usedOffline && res.errorMessage != null) {
+                        errorMessage = "Offline script: ${res.errorMessage}"
+                    }
+                    isGenerating = false
+                }
+            } catch (e: Exception) {
+                withContext(Dispatchers.Main) {
+                    errorMessage = "Error: ${e.message}"
+                    isGenerating = false
+                }
             }
         }
     }
@@ -124,12 +148,35 @@ fun ExplainerTestScreen(onBack: () -> Unit) {
             Button(
                 onClick = {
                     isGenerating = true
+                    errorMessage = null
                     coroutineScope.launch(Dispatchers.IO) {
-                        val slides = AiGenerator.generateSlidesForTopic(context, selectedNiche, topicInput, "")
-                        withContext(Dispatchers.Main) {
-                            generatedSlides = slides
-                            currentSceneIndex = 0
-                            isGenerating = false
+                        try {
+                            val activeKey = SecurePreferences(context).getActiveApiKey()
+                            if (activeKey.isBlank()) {
+                                withContext(Dispatchers.Main) {
+                                    errorMessage = "Settings mein key daalo"
+                                }
+                            }
+                            val res = AiGenerator.generateSlidesForTopic(
+                                context = context,
+                                niche = selectedNiche,
+                                topic = topicInput,
+                                apiKey = activeKey,
+                                allowOfflineFallback = true
+                            )
+                            withContext(Dispatchers.Main) {
+                                generatedSlides = res.slides
+                                currentSceneIndex = 0
+                                if (res.usedOffline && res.errorMessage != null) {
+                                    errorMessage = "Offline script: ${res.errorMessage}"
+                                }
+                                isGenerating = false
+                            }
+                        } catch (e: Exception) {
+                            withContext(Dispatchers.Main) {
+                                errorMessage = "Error: ${e.message}"
+                                isGenerating = false
+                            }
                         }
                     }
                 },
@@ -141,6 +188,15 @@ fun ExplainerTestScreen(onBack: () -> Unit) {
                 } else {
                     Text("🚀 Generate Dynamic Explainer Scenes", fontWeight = FontWeight.Bold, color = Color.White)
                 }
+            }
+
+            if (errorMessage != null) {
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = errorMessage!!,
+                    color = Color.Yellow,
+                    fontSize = 12.sp
+                )
             }
 
             Spacer(modifier = Modifier.height(8.dp))
