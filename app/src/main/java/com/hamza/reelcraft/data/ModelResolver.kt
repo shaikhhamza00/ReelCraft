@@ -19,47 +19,107 @@ data class ModelListInfo(
 object ModelResolver {
     private const val TAG = "ModelResolver"
     private const val PREFS_NAME = "gemini_model_cache"
-    private const val KEY_MODEL = "cached_model_name"
-    private const val KEY_TIME = "cached_model_time"
-    private const val CACHE_DURATION_MS = 24 * 60 * 60 * 1000L // 24 hours
 
-    val FALLBACK_MODELS = listOf("gemini-3.8-flash", "gemini-3.7-flash", "gemini-3.6-flash", "gemini-3.5-flash-lite", "gemini-flash-latest")
+    val FALLBACK_MODELS = listOf(
+        "gemini-3.5-flash-lite",
+        "gemini-3.8-flash",
+        "gemini-3.7-flash",
+        "gemini-3.6-flash",
+        "gemini-flash-latest"
+    )
 
-    suspend fun resolveModel(context: Context, apiKey: String): String {
+    fun blacklistModel(context: Context, modelName: String, durationMs: Long) {
         val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-        val cachedModel = prefs.getString(KEY_MODEL, null)
-        val cachedTime = prefs.getLong(KEY_TIME, 0L)
-        val now = System.currentTimeMillis()
-
-        if (!cachedModel.isNullOrBlank() && (now - cachedTime < CACHE_DURATION_MS)) {
-            Log.i(TAG, "Using cached Gemini model: $cachedModel")
-            return cachedModel
-        }
-
-        try {
-            val info = fetchModelsFromApi(apiKey)
-            if (info.selectedModel != null) {
-                prefs.edit()
-                    .putString(KEY_MODEL, info.selectedModel)
-                    .putLong(KEY_TIME, now)
-                    .apply()
-                Log.i(TAG, "Resolved and cached Gemini model: ${info.selectedModel}")
-                return info.selectedModel
-            }
-        } catch (e: Exception) {
-            Log.e(TAG, "Failed to fetch model list from API, using fallback", e)
-        }
-
-        return FALLBACK_MODELS.first()
+        val expireTime = System.currentTimeMillis() + durationMs
+        prefs.edit().putLong("blacklist_$modelName", expireTime).apply()
+        Log.w(TAG, "Blacklisted model $modelName for ${durationMs / 1000}s (until $expireTime)")
     }
 
-    fun removeCachedModel(context: Context, badModel: String) {
+    fun isBlacklisted(context: Context, modelName: String): Boolean {
         val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-        val cached = prefs.getString(KEY_MODEL, null)
-        if (cached == badModel) {
-            prefs.edit().remove(KEY_MODEL).remove(KEY_TIME).apply()
-            Log.w(TAG, "Removed blacklisted bad model from cache: $badModel")
+        val expireTime = prefs.getLong("blacklist_$modelName", 0L)
+        val now = System.currentTimeMillis()
+        if (expireTime > now) {
+            return true
         }
+        if (expireTime > 0L) {
+            prefs.edit().remove("blacklist_$modelName").apply()
+        }
+        return false
+    }
+
+    fun saveWorkingModel(context: Context, modelName: String) {
+        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        prefs.edit()
+            .putString("last_working_model", modelName)
+            .putLong("last_working_time", System.currentTimeMillis())
+            .apply()
+        Log.i(TAG, "Saved last working model: $modelName")
+    }
+
+    fun getWorkingModel(context: Context): String? {
+        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        val model = prefs.getString("last_working_model", null)
+        val time = prefs.getLong("last_working_time", 0L)
+        val sixHoursMs = 6 * 60 * 60 * 1000L
+        if (!model.isNullOrBlank() && (System.currentTimeMillis() - time < sixHoursMs)) {
+            if (!isBlacklisted(context, model)) {
+                return model
+            }
+        }
+        return null
+    }
+
+    fun getCandidateModels(context: Context, apiKey: String): List<String> {
+        val candidates = mutableListOf<String>()
+
+        // (a) Last working model if < 6 hrs and not blacklisted
+        val working = getWorkingModel(context)
+        if (!working.isNullOrBlank()) {
+            candidates.add(working)
+        }
+
+        // Fetch ListModels from API
+        val info = fetchModelsFromApi(apiKey)
+        if (info.allFlashModels.isNotEmpty()) {
+            val liteModels = mutableListOf<String>()
+            val flashModels = mutableListOf<String>()
+            val latestModels = mutableListOf<String>()
+
+            for (m in info.allFlashModels) {
+                val lower = m.lowercase()
+                if (lower.contains("latest")) {
+                    latestModels.add(m)
+                } else if (lower.contains("lite")) {
+                    liteModels.add(m)
+                } else {
+                    flashModels.add(m)
+                }
+            }
+
+            val versionComparator = Comparator<String> { a, b ->
+                val verA = extractVersion(a)
+                val verB = extractVersion(b)
+                if (verA != verB) verB.compareTo(verA) else a.compareTo(b)
+            }
+            liteModels.sortWith(versionComparator)
+            flashModels.sortWith(versionComparator)
+            latestModels.sortWith(versionComparator)
+
+            // Order: (b) flash-lite, (c) flash, (d) latest
+            candidates.addAll(liteModels)
+            candidates.addAll(flashModels)
+            candidates.addAll(latestModels)
+        }
+
+        candidates.addAll(FALLBACK_MODELS)
+
+        val result = candidates
+            .distinct()
+            .filter { !isBlacklisted(context, it) }
+
+        Log.i(TAG, "Candidate models (${result.size}): $result")
+        return if (result.isNotEmpty()) result else FALLBACK_MODELS.filter { !isBlacklisted(context, it) }.ifEmpty { FALLBACK_MODELS }
     }
 
     fun fetchModelsFromApi(apiKey: String): ModelListInfo {
@@ -70,8 +130,8 @@ object ModelResolver {
         val connection = (url.openConnection() as HttpURLConnection).apply {
             requestMethod = "GET"
             setRequestProperty("x-goog-api-key", apiKey)
-            connectTimeout = 15000
-            readTimeout = 15000
+            connectTimeout = 10000
+            readTimeout = 10000
         }
 
         val responseCode = connection.responseCode
@@ -83,8 +143,6 @@ object ModelResolver {
             val root = JSONObject(responseStr)
             val models = root.optJSONArray("models") ?: return ModelListInfo(0, null, emptyList(), responseCode, null)
             val flashModels = mutableListOf<String>()
-            val liteModels = mutableListOf<String>()
-            val latestModels = mutableListOf<String>()
 
             for (i in 0 until models.length()) {
                 val m = models.optJSONObject(i) ?: continue
@@ -105,38 +163,15 @@ object ModelResolver {
                     val lower = name.lowercase()
                     val excluded = listOf("image", "tts", "live", "audio", "robotics", "embedding", "imagen", "veo", "lyria")
                     if (lower.contains("flash") && excluded.none { lower.contains(it) }) {
-                        if (lower.contains("latest")) {
-                            latestModels.add(name)
-                        } else if (lower.contains("lite")) {
-                            liteModels.add(name)
-                        } else {
-                            flashModels.add(name)
-                        }
+                        flashModels.add(name)
                     }
                 }
             }
 
-            flashModels.sortWith(Comparator { a, b ->
-                val verA = extractVersion(a)
-                val verB = extractVersion(b)
-                if (verA != verB) {
-                    verB.compareTo(verA)
-                } else {
-                    val isPreviewA = a.lowercase().contains("preview")
-                    val isPreviewB = b.lowercase().contains("preview")
-                    if (isPreviewA == isPreviewB) 0 else if (isPreviewA) 1 else -1
-                }
-            })
-
-            val combined = mutableListOf<String>()
-            combined.addAll(flashModels)
-            combined.addAll(liteModels)
-            combined.addAll(latestModels)
-
             return ModelListInfo(
-                flashModelsCount = combined.size,
-                selectedModel = combined.firstOrNull(),
-                allFlashModels = combined,
+                flashModelsCount = flashModels.size,
+                selectedModel = flashModels.firstOrNull(),
+                allFlashModels = flashModels,
                 httpCode = responseCode,
                 errorBody = null
             )

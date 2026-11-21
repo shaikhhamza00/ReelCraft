@@ -35,6 +35,19 @@ data class QuickTestResult(
     val selectedModelFromApi: String?
 )
 
+data class ModelProbeItem(
+    val modelName: String,
+    val httpCode: Int,
+    val latencyMs: Long,
+    val statusOrError: String,
+    val isRecommended: Boolean = false
+)
+
+data class ModelProbeResult(
+    val items: List<ModelProbeItem>,
+    val recommendedModel: String?
+)
+
 object AiGenerator {
     private const val TAG = "AiGenerator"
 
@@ -44,7 +57,8 @@ object AiGenerator {
         topic: String,
         apiKey: String,
         language: String = "Roman Urdu",
-        allowOfflineFallback: Boolean = false
+        allowOfflineFallback: Boolean = false,
+        onProgress: (String) -> Unit = {}
     ): GenerationResult {
         val trimmedKey = apiKey.trim()
         if (trimmedKey.isBlank()) {
@@ -102,39 +116,54 @@ object AiGenerator {
                 3. No moral lectures ("zid karo", "sabaq", "haar mat maano"). Show, don't tell.
             """.trimIndent()
 
-            val primaryModel = ModelResolver.resolveModel(context, trimmedKey)
-            // Step 4: LinkedHashSet deduplication & max 3 models
-            val modelsToTry = LinkedHashSet(listOf(primaryModel) + ModelResolver.FALLBACK_MODELS).take(3).toList()
+            // Step 2: Ordered candidate list
+            val candidates = ModelResolver.getCandidateModels(context, trimmedKey)
 
             var responseStr: String? = null
-            var lastErrorMsg = ""
             var lastModelUsed: String? = null
             var lastHttpCode: Int? = null
             var lastFinishReason: String? = null
             var totalLatencyMs = 0L
 
+            val modelErrors = mutableListOf<String>()
+
             val startTimeGlobal = System.currentTimeMillis()
-            val totalLimitMs = 2 * 60 * 1000L // 2 minutes total limit
+            val totalLimitMs = 90 * 1000L // Step 3: Total 90 seconds limit
 
             var currentMaxOutputTokens = 8192
 
-            modelLoop@ for (modelName in modelsToTry) {
+            modelLoop@ for ((index, modelName) in candidates.withIndex()) {
                 if (System.currentTimeMillis() - startTimeGlobal > totalLimitMs) {
-                    Log.w(TAG, "Total generation time limit (2 min) reached. Stopping model attempts.")
+                    Log.w(TAG, "Total generation time limit (90s) reached. Stopping model attempts.")
+                    modelErrors.add("Time limit (90s) exceeded")
                     break
                 }
 
                 lastModelUsed = modelName
                 var includeThinking = modelName.lowercase().startsWith("gemini-3")
 
-                var attempt = 0
-                val maxAttempts = 3
-                var successForModel = false
+                val progressMsg = "Model $modelName try ho raha hai (${index + 1}/${candidates.size})..."
+                Log.i(TAG, progressMsg)
+                onProgress(progressMsg)
 
-                while (attempt < maxAttempts && !successForModel) {
+                var attempt = 0
+                val maxAttemptsForModel = 2 // max 1 retry for 503/429/MAX_TOKENS
+
+                while (attempt < maxAttemptsForModel) {
                     val callStart = System.currentTimeMillis()
                     try {
-                        Log.d(TAG, "Trying model: $modelName (attempt ${attempt + 1}/$maxAttempts)")
+                        val genConfigObj = JSONObject().apply {
+                            put("responseMimeType", "application/json")
+                            put("temperature", 0.9)
+                            put("topP", 0.95)
+                            put("maxOutputTokens", currentMaxOutputTokens)
+                            if (includeThinking) {
+                                put("thinkingConfig", JSONObject().put("thinkingLevel", "low"))
+                            }
+                        }
+
+                        // Step 3: Log generationConfig (without API key)
+                        Log.i(TAG, "generationConfig for $modelName: $genConfigObj")
 
                         val jsonBody = JSONObject().apply {
                             put("contents", JSONArray().put(
@@ -142,26 +171,19 @@ object AiGenerator {
                                     JSONObject().put("text", prompt)
                                 ))
                             ))
-                            put("generationConfig", JSONObject().apply {
-                                put("responseMimeType", "application/json")
-                                put("temperature", 0.9)
-                                put("topP", 0.95)
-                                put("maxOutputTokens", currentMaxOutputTokens)
-                                if (includeThinking) {
-                                    put("thinkingConfig", JSONObject().put("thinkingLevel", "low"))
-                                }
-                            })
+                            put("generationConfig", genConfigObj)
                         }
 
-                        // Step 5: x-goog-api-key header (NO key in URL)
+                        // Step 5: Header x-goog-api-key (NO key in URL)
                         val url = URL("https://generativelanguage.googleapis.com/v1beta/models/$modelName:generateContent")
                         val connection = (url.openConnection() as HttpURLConnection).apply {
                             requestMethod = "POST"
                             setRequestProperty("Content-Type", "application/json; charset=utf-8")
                             setRequestProperty("x-goog-api-key", trimmedKey)
                             doOutput = true
-                            connectTimeout = 15000
-                            readTimeout = 45000
+                            // Step 3: connectTimeout 10s, readTimeout 30s
+                            connectTimeout = 10000
+                            readTimeout = 30000
                         }
 
                         connection.outputStream.use { os ->
@@ -174,18 +196,15 @@ object AiGenerator {
                         val callLatency = System.currentTimeMillis() - callStart
                         totalLatencyMs += callLatency
 
-                        Log.i(TAG, "Model $modelName attempt ${attempt + 1} response code: $responseCode (${callLatency}ms)")
+                        Log.i(TAG, "Model $modelName attempt ${attempt + 1} code: $responseCode (${callLatency}ms)")
 
                         if (responseCode == HttpURLConnection.HTTP_OK) {
-                            val responseStream = BufferedReader(InputStreamReader(connection.inputStream))
-                            val rawResp = responseStream.readText()
-                            responseStream.close()
+                            val rawResp = connection.inputStream.bufferedReader().use { it.readText() }
 
-                            // Check finishReason
                             val root = JSONObject(rawResp)
-                            val candidates = root.optJSONArray("candidates")
-                            if (candidates != null && candidates.length() > 0) {
-                                val cand0 = candidates.getJSONObject(0)
+                            val candidatesArray = root.optJSONArray("candidates")
+                            if (candidatesArray != null && candidatesArray.length() > 0) {
+                                val cand0 = candidatesArray.getJSONObject(0)
                                 val fReason = cand0.optString("finishReason", "STOP")
                                 lastFinishReason = fReason
 
@@ -195,66 +214,87 @@ object AiGenerator {
                                     attempt++
                                     continue
                                 } else if (fReason == "SAFETY") {
-                                    lastErrorMsg = "Gemini safety filter ne request block kar di (finishReason: SAFETY)"
-                                    Log.e(TAG, lastErrorMsg)
+                                    val err = "$modelName: Safety filter block (finishReason: SAFETY)"
+                                    modelErrors.add(err)
+                                    Log.e(TAG, err)
                                     break
                                 }
                             }
 
                             responseStr = rawResp
-                            successForModel = true
-                            Log.i(TAG, "Successfully generated content using model: $modelName on attempt ${attempt + 1}")
+                            ModelResolver.saveWorkingModel(context, modelName)
+                            Log.i(TAG, "Successfully generated content using model: $modelName")
                             break@modelLoop
                         } else {
-                            val errorStreamStr = connection.errorStr() ?: "No error body"
-                            Log.e(TAG, "Model $modelName failed HTTP $responseCode: $errorStreamStr")
+                            val errStr = connection.errorStr() ?: "No error body"
+                            Log.e(TAG, "Model $modelName HTTP $responseCode: $errStr")
 
-                            if (responseCode == 400) {
-                                val lowerError = errorStreamStr.lowercase()
-                                // Step 3: Retry if thinking/thinkingConfig error
+                            // Check FATAL API Key error first
+                            if (responseCode == 401 || errStr.contains("API_KEY_INVALID") || errStr.contains("API key not valid")) {
+                                val fatalErr = "API key sahi nahi hai (API_KEY_INVALID / 401)"
+                                modelErrors.add(fatalErr)
+                                Log.e(TAG, "FATAL API KEY ERROR: Stopping generation completely.")
+                                return@withContext GenerationResult(
+                                    slides = emptyList(),
+                                    usedOffline = false,
+                                    errorMessage = fatalErr,
+                                    modelUsed = modelName,
+                                    httpCode = responseCode
+                                )
+                            }
+
+                            if (responseCode == 403) {
+                                // Step 1: 403 PERMISSION_DENIED -> Blacklist 24 hours & skip to next model
+                                ModelResolver.blacklistModel(context, modelName, 24 * 60 * 60 * 1000L)
+                                val msg = "$modelName: HTTP 403 PERMISSION_DENIED"
+                                modelErrors.add(msg)
+                                break // move to next model
+                            } else if (responseCode == 404) {
+                                // Step 1: 404 NOT_FOUND -> Blacklist 24 hours & skip to next model
+                                ModelResolver.blacklistModel(context, modelName, 24 * 60 * 60 * 1000L)
+                                val msg = "$modelName: HTTP 404 Not Found"
+                                modelErrors.add(msg)
+                                break // move to next model
+                            } else if (responseCode == 503 || responseCode == 429) {
+                                // Step 1: 503/429 -> Blacklist 15 min & 1 retry after 3s
+                                ModelResolver.blacklistModel(context, modelName, 15 * 60 * 1000L)
+                                val msg = "$modelName: HTTP $responseCode (High demand)"
+                                modelErrors.add(msg)
+                                if (attempt == 0) {
+                                    Log.w(TAG, "$modelName returned $responseCode. Retrying once after 3s...")
+                                    delay(3000L)
+                                    attempt++
+                                    continue
+                                } else {
+                                    break // move to next model
+                                }
+                            } else if (responseCode == 400) {
+                                val lowerError = errStr.lowercase()
                                 if (includeThinking && (lowerError.contains("thinking") || lowerError.contains("thinkingconfig"))) {
                                     Log.w(TAG, "HTTP 400 related to thinkingConfig. Retrying without thinkingConfig...")
                                     includeThinking = false
                                     attempt++
                                     continue
                                 }
-
-                                ModelResolver.removeCachedModel(context, modelName)
-                                lastErrorMsg = parseGoogleErrorMessage(responseCode, errorStreamStr)
+                                ModelResolver.blacklistModel(context, modelName, 24 * 60 * 60 * 1000L)
+                                val parsedMsg = parseGoogleErrorMessage(responseCode, errStr)
+                                modelErrors.add("$modelName: $parsedMsg")
                                 break
-                            } else if (responseCode == 401 || responseCode == 403) {
-                                ModelResolver.removeCachedModel(context, modelName)
-                                lastErrorMsg = "Key unauthorized hai ya Gemini API enable nahi hai (HTTP $responseCode)."
-                                break
-                            } else if (responseCode == 404) {
-                                ModelResolver.removeCachedModel(context, modelName)
-                                lastErrorMsg = "Model $modelName nahi mila (HTTP 404)."
-                                Log.w(TAG, "Model $modelName returned 404. Blacklisted from cache.")
-                                break
-                            } else if (responseCode == 503 || responseCode == 429) {
-                                val backoffMs = when (attempt) {
-                                    0 -> 2000L
-                                    1 -> 4000L
-                                    else -> 8000L
-                                }
-                                lastErrorMsg = "Server masroof hai (HTTP $responseCode). Retrying in ${backoffMs}ms..."
-                                Log.w(TAG, lastErrorMsg)
-                                delay(backoffMs)
-                                attempt++
-                                continue
                             } else {
-                                lastErrorMsg = parseGoogleErrorMessage(responseCode, errorStreamStr)
+                                modelErrors.add("$modelName: HTTP $responseCode")
                                 break
                             }
                         }
                     } catch (e: SocketTimeoutException) {
-                        lastErrorMsg = "Timeout on model $modelName (attempt ${attempt + 1}): ${e.message}"
-                        Log.w(TAG, lastErrorMsg)
-                        attempt++
-                        if (attempt >= maxAttempts) break
+                        val msg = "$modelName: Timeout (>30s)"
+                        ModelResolver.blacklistModel(context, modelName, 15 * 60 * 1000L)
+                        modelErrors.add(msg)
+                        Log.w(TAG, msg)
+                        break // move to next model
                     } catch (e: Exception) {
-                        lastErrorMsg = "Exception on model $modelName: ${e.message}"
-                        Log.e(TAG, lastErrorMsg, e)
+                        val msg = "$modelName: ${e.message}"
+                        modelErrors.add(msg)
+                        Log.e(TAG, msg, e)
                         break
                     }
                 }
@@ -267,9 +307,8 @@ object AiGenerator {
                 try {
                     jsonArray = JSONArray(textOutput)
                 } catch (e: Exception) {
-                    // Step 3: Print first 300 characters in Log.e without API key
                     Log.e(TAG, "JSON parse failed. First 300 chars of output: ${textOutput.take(300)}", e)
-                    lastErrorMsg = "JSON response format sahi nahi tha (JSON parse failed)"
+                    modelErrors.add("$lastModelUsed: JSON parse failed")
                 }
 
                 if (jsonArray != null) {
@@ -319,13 +358,20 @@ object AiGenerator {
                 }
             }
 
-            // Fallback decision
-            Log.w(TAG, "Gemini generation failed. allowOfflineFallback=$allowOfflineFallback, lastErrorMsg=$lastErrorMsg")
+            // Step 5: Final Fallback handling
+            val combinedErrorMsg = if (modelErrors.isNotEmpty()) {
+                "Gemini models fail hue:\n" + modelErrors.distinct().joinToString("\n• ", prefix = "• ")
+            } else {
+                "Gemini se script nahi aa saki"
+            }
+
+            Log.w(TAG, "All models failed. allowOfflineFallback=$allowOfflineFallback. Errors:\n$combinedErrorMsg")
+
             if (allowOfflineFallback) {
                 GenerationResult(
                     slides = getOfflineFallbackSlides(niche, topic),
                     usedOffline = true,
-                    errorMessage = if (lastErrorMsg.isBlank()) "Gemini fail hua" else lastErrorMsg,
+                    errorMessage = combinedErrorMsg,
                     modelUsed = lastModelUsed,
                     httpCode = lastHttpCode,
                     finishReason = lastFinishReason,
@@ -335,13 +381,99 @@ object AiGenerator {
                 GenerationResult(
                     slides = emptyList(),
                     usedOffline = false,
-                    errorMessage = if (lastErrorMsg.isBlank()) "Gemini response error" else lastErrorMsg,
+                    errorMessage = combinedErrorMsg,
                     modelUsed = lastModelUsed,
                     httpCode = lastHttpCode,
                     finishReason = lastFinishReason,
                     latencyMs = totalLatencyMs
                 )
             }
+        }
+    }
+
+    suspend fun runModelProbe(context: Context, apiKey: String): ModelProbeResult {
+        val trimmedKey = apiKey.trim()
+        if (trimmedKey.isBlank()) {
+            return ModelProbeResult(emptyList(), null)
+        }
+
+        return withContext(Dispatchers.IO) {
+            val candidateModels = ModelResolver.getCandidateModels(context, trimmedKey)
+            val items = mutableListOf<ModelProbeItem>()
+            var recommendedModel: String? = null
+
+            for (modelName in candidateModels) {
+                val includeThinking = modelName.lowercase().startsWith("gemini-3")
+                val jsonBody = JSONObject().apply {
+                    put("contents", JSONArray().put(
+                        JSONObject().put("parts", JSONArray().put(
+                            JSONObject().put("text", "Respond ONLY with valid JSON: {\"ok\":true}")
+                        ))
+                    ))
+                    put("generationConfig", JSONObject().apply {
+                        put("responseMimeType", "application/json")
+                        put("maxOutputTokens", 64)
+                        if (includeThinking) {
+                            put("thinkingConfig", JSONObject().put("thinkingLevel", "low"))
+                        }
+                    })
+                }
+
+                val startTime = System.currentTimeMillis()
+                var httpCode = 0
+                var statusOrError = ""
+
+                try {
+                    val url = URL("https://generativelanguage.googleapis.com/v1beta/models/$modelName:generateContent")
+                    val connection = (url.openConnection() as HttpURLConnection).apply {
+                        requestMethod = "POST"
+                        setRequestProperty("Content-Type", "application/json; charset=utf-8")
+                        setRequestProperty("x-goog-api-key", trimmedKey)
+                        doOutput = true
+                        connectTimeout = 10000
+                        readTimeout = 15000
+                    }
+
+                    connection.outputStream.use { os ->
+                        val input = jsonBody.toString().toByteArray(Charsets.UTF_8)
+                        os.write(input, 0, input.size)
+                    }
+
+                    httpCode = connection.responseCode
+                    val latency = System.currentTimeMillis() - startTime
+
+                    if (httpCode == HttpURLConnection.HTTP_OK) {
+                        val rawResp = connection.inputStream.bufferedReader().use { it.readText() }
+                        statusOrError = "200 OK: " + extractValidTextOutput(rawResp).take(60)
+                        val isFirstRec = (recommendedModel == null)
+                        if (isFirstRec) {
+                            recommendedModel = modelName
+                            ModelResolver.saveWorkingModel(context, modelName)
+                        }
+                        items.add(ModelProbeItem(modelName, httpCode, latency, statusOrError, isFirstRec))
+                    } else {
+                        val errBody = connection.errorStr() ?: "HTTP $httpCode"
+                        statusOrError = parseGoogleErrorMessage(httpCode, errBody)
+                        if (httpCode == 403 || httpCode == 404) {
+                            ModelResolver.blacklistModel(context, modelName, 24 * 60 * 60 * 1000L)
+                        } else if (httpCode == 503 || httpCode == 429) {
+                            ModelResolver.blacklistModel(context, modelName, 15 * 60 * 1000L)
+                        }
+                        items.add(ModelProbeItem(modelName, httpCode, latency, statusOrError, false))
+                    }
+                } catch (e: SocketTimeoutException) {
+                    val latency = System.currentTimeMillis() - startTime
+                    statusOrError = "Timeout (>15s)"
+                    ModelResolver.blacklistModel(context, modelName, 15 * 60 * 1000L)
+                    items.add(ModelProbeItem(modelName, 408, latency, statusOrError, false))
+                } catch (e: Exception) {
+                    val latency = System.currentTimeMillis() - startTime
+                    statusOrError = "Error: ${e.message}"
+                    items.add(ModelProbeItem(modelName, 0, latency, statusOrError, false))
+                }
+            }
+
+            ModelProbeResult(items, recommendedModel)
         }
     }
 
@@ -361,7 +493,8 @@ object AiGenerator {
 
         return withContext(Dispatchers.IO) {
             val listInfo = ModelResolver.fetchModelsFromApi(trimmedKey)
-            val modelToUse = listInfo.selectedModel ?: ModelResolver.FALLBACK_MODELS.first()
+            val candidates = ModelResolver.getCandidateModels(context, trimmedKey)
+            val modelToUse = candidates.firstOrNull() ?: ModelResolver.FALLBACK_MODELS.first()
             val includeThinking = modelToUse.lowercase().startsWith("gemini-3")
 
             val jsonBody = JSONObject().apply {
@@ -391,7 +524,7 @@ object AiGenerator {
                     setRequestProperty("Content-Type", "application/json; charset=utf-8")
                     setRequestProperty("x-goog-api-key", trimmedKey)
                     doOutput = true
-                    connectTimeout = 15000
+                    connectTimeout = 10000
                     readTimeout = 15000
                 }
 
@@ -407,6 +540,7 @@ object AiGenerator {
                     val cand = root.optJSONArray("candidates")?.optJSONObject(0)
                     finishReason = cand?.optString("finishReason", "STOP")
                     responseTextOrError = extractValidTextOutput(rawResp).take(200)
+                    ModelResolver.saveWorkingModel(context, modelToUse)
                 } else {
                     val errBody = connection.errorStr() ?: "HTTP $httpCode"
                     responseTextOrError = parseGoogleErrorMessage(httpCode, errBody)
@@ -429,15 +563,16 @@ object AiGenerator {
     }
 
     private fun parseGoogleErrorMessage(responseCode: Int, errorStream: String): String {
-        if (errorStream.contains("API_KEY_INVALID")) {
+        if (errorStream.contains("API_KEY_INVALID") || errorStream.contains("API key not valid")) {
             return "API key sahi nahi hai (API_KEY_INVALID)."
         }
         return try {
             val root = JSONObject(errorStream)
             val errObj = root.optJSONObject("error")
             val msg = errObj?.optString("message")
+            val status = errObj?.optString("status")
             if (!msg.isNullOrBlank()) {
-                "HTTP $responseCode: $msg"
+                if (!status.isNullOrBlank()) "HTTP $responseCode [$status]: $msg" else "HTTP $responseCode: $msg"
             } else {
                 "HTTP $responseCode: $errorStream"
             }

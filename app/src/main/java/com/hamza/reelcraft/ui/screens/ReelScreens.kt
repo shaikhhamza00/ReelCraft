@@ -373,25 +373,25 @@ fun SettingsScreen(viewModel: ReelViewModel, onBack: () -> Unit) {
             }
 
             Spacer(modifier = Modifier.height(28.dp))
-            SectionHeader(title = "Gemini API Diagnostics & Testing")
+            SectionHeader(title = "Gemini API Diagnostics & Model Probe")
             Spacer(modifier = Modifier.height(12.dp))
 
-            // Step 7: Test Gemini & Full Script Buttons
+            // Buttons
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(10.dp)
             ) {
                 Button(
-                    onClick = { viewModel.runQuickGeminiTest() },
-                    enabled = !viewModel.isTestingGemini,
+                    onClick = { viewModel.runModelProbe() },
+                    enabled = !viewModel.isRunningProbe,
                     modifier = Modifier.weight(1f),
                     shape = RoundedCornerShape(14.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2563EB))
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF0284C7))
                 ) {
-                    if (viewModel.isTestingGemini) {
+                    if (viewModel.isRunningProbe) {
                         CircularProgressIndicator(modifier = Modifier.size(18.dp), color = Color.White)
                     } else {
-                        Text("🧪 Test Gemini API", fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                        Text("🔬 Model Probe", fontSize = 13.sp, fontWeight = FontWeight.Bold)
                     }
                 }
 
@@ -405,44 +405,109 @@ fun SettingsScreen(viewModel: ReelViewModel, onBack: () -> Unit) {
                     if (viewModel.isTestingScript) {
                         CircularProgressIndicator(modifier = Modifier.size(18.dp), color = Color.White)
                     } else {
-                        Text("📜 Poori Script Test", fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                        Text("📜 Script Test", fontSize = 13.sp, fontWeight = FontWeight.Bold)
                     }
                 }
             }
 
-            // Diagnostic Results Cards
-            viewModel.quickTestResult?.let { res ->
+            // Model Probe Result Table
+            viewModel.modelProbeResult?.let { probeRes ->
                 Spacer(modifier = Modifier.height(14.dp))
                 Card(
-                    colors = CardDefaults.cardColors(containerColor = Color(0xFF1E293B)),
+                    colors = CardDefaults.cardColors(containerColor = Color(0xFF0F172A)),
                     shape = RoundedCornerShape(16.dp),
+                    border = BorderStroke(1.dp, Color(0xFF334155)),
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Column(modifier = Modifier.padding(14.dp)) {
-                        Text(
-                            text = "📊 Quick API Diagnostic Result",
-                            style = MaterialTheme.typography.titleMedium,
-                            color = Color.Cyan,
-                            fontWeight = FontWeight.Bold
-                        )
-                        Spacer(modifier = Modifier.height(8.dp))
-                        Text(text = "• Flash Models Found: ${res.flashModelsCount}", color = Color.White, fontSize = 13.sp)
-                        Text(text = "• Selected Model: ${res.selectedModelFromApi ?: "None"}", color = Color.White, fontSize = 13.sp)
-                        Text(text = "• Model Used: ${res.modelUsed ?: "N/A"}", color = Color.White, fontSize = 13.sp)
-                        Text(
-                            text = "• HTTP Code: ${res.httpCode}",
-                            color = if (res.httpCode == 200) Color(0xFF34D399) else Color(0xFFEF4444),
-                            fontSize = 13.sp,
-                            fontWeight = FontWeight.Bold
-                        )
-                        Text(text = "• Finish Reason: ${res.finishReason ?: "N/A"}", color = Color.White, fontSize = 13.sp)
-                        Text(text = "• Latency: ${res.latencyMs} ms", color = Color.White, fontSize = 13.sp)
-                        Spacer(modifier = Modifier.height(6.dp))
-                        Text(
-                            text = "Response / Error Body (first 200 chars):\n${res.responseTextOrError}",
-                            color = Color.LightGray,
-                            fontSize = 12.sp
-                        )
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = "🔬 Candidate Model Probe Results",
+                                style = MaterialTheme.typography.titleMedium,
+                                color = Color.Cyan,
+                                fontWeight = FontWeight.Bold
+                            )
+                            if (probeRes.recommendedModel != null) {
+                                Surface(
+                                    color = Color(0xFF059669),
+                                    shape = RoundedCornerShape(12.dp)
+                                ) {
+                                    Text(
+                                        text = "Rec: ${probeRes.recommendedModel}",
+                                        color = Color.White,
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                                    )
+                                }
+                            }
+                        }
+                        Spacer(modifier = Modifier.height(12.dp))
+
+                        // Table Header Row
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .background(Color(0xFF1E293B))
+                                .padding(horizontal = 8.dp, vertical = 6.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text("Model", color = Color.LightGray, fontSize = 11.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1.8f))
+                            Text("HTTP", color = Color.LightGray, fontSize = 11.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(0.7f))
+                            Text("Latency", color = Color.LightGray, fontSize = 11.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(0.9f))
+                            Text("Status / Error", color = Color.LightGray, fontSize = 11.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(2f))
+                        }
+                        HorizontalDivider(color = Color(0xFF334155))
+
+                        // Table Items
+                        probeRes.items.forEach { item ->
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 8.dp, vertical = 6.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Row(
+                                    modifier = Modifier.weight(1.8f),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    if (item.isRecommended) {
+                                        Text("⭐ ", fontSize = 10.sp)
+                                    }
+                                    Text(
+                                        text = item.modelName,
+                                        color = if (item.isRecommended) Color.Cyan else Color.White,
+                                        fontSize = 11.sp,
+                                        fontWeight = if (item.isRecommended) FontWeight.Bold else FontWeight.Normal
+                                    )
+                                }
+                                Text(
+                                    text = "${item.httpCode}",
+                                    color = if (item.httpCode == 200) Color(0xFF34D399) else Color(0xFFEF4444),
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    modifier = Modifier.weight(0.7f)
+                                )
+                                Text(
+                                    text = "${item.latencyMs}ms",
+                                    color = Color.LightGray,
+                                    fontSize = 11.sp,
+                                    modifier = Modifier.weight(0.9f)
+                                )
+                                Text(
+                                    text = item.statusOrError,
+                                    color = if (item.httpCode == 200) Color(0xFF34D399) else Color(0xFFFCA5A5),
+                                    fontSize = 10.sp,
+                                    modifier = Modifier.weight(2f),
+                                    maxLines = 2
+                                )
+                            }
+                            HorizontalDivider(color = Color(0xFF1E293B), thickness = 0.5.dp)
+                        }
                     }
                 }
             }
@@ -474,8 +539,9 @@ fun SettingsScreen(viewModel: ReelViewModel, onBack: () -> Unit) {
                         Text(text = "• Finish Reason: ${res.finishReason ?: "N/A"}", color = Color.White, fontSize = 13.sp)
                         Text(text = "• Latency: ${res.latencyMs} ms", color = Color.White, fontSize = 13.sp)
                         if (!res.errorMessage.isNullOrBlank()) {
+                            Spacer(modifier = Modifier.height(4.dp))
                             Text(
-                                text = "• Error Message: ${res.errorMessage}",
+                                text = "• Details:\n${res.errorMessage}",
                                 color = Color(0xFFEF4444),
                                 fontSize = 12.sp
                             )

@@ -12,6 +12,7 @@ import androidx.lifecycle.viewModelScope
 import com.hamza.reelcraft.audio.AudioPipeline
 import com.hamza.reelcraft.data.AiGenerator
 import com.hamza.reelcraft.data.GenerationResult
+import com.hamza.reelcraft.data.ModelProbeResult
 import com.hamza.reelcraft.data.QuickTestResult
 import com.hamza.reelcraft.data.SecurePreferences
 import com.hamza.reelcraft.model.SlideData
@@ -46,8 +47,10 @@ class ReelViewModel(application: Application) : AndroidViewModel(application) {
     var lastGenerationResult by mutableStateOf<GenerationResult?>(null)
     var quickTestResult by mutableStateOf<QuickTestResult?>(null)
     var fullScriptTestResult by mutableStateOf<GenerationResult?>(null)
+    var modelProbeResult by mutableStateOf<ModelProbeResult?>(null)
     var isTestingGemini by mutableStateOf(false)
     var isTestingScript by mutableStateOf(false)
+    var isRunningProbe by mutableStateOf(false)
 
     // Multi-style generation storage (Map of Style Name -> Video File)
     var stylePreviews by mutableStateOf<Map<String, File?>>(emptyMap())
@@ -95,7 +98,10 @@ class ReelViewModel(application: Application) : AndroidViewModel(application) {
                     topic = topicText,
                     apiKey = selectedApiKey,
                     language = selectedLanguage,
-                    allowOfflineFallback = allowFallback
+                    allowOfflineFallback = allowFallback,
+                    onProgress = { progressText ->
+                        exportStatus = progressText
+                    }
                 )
                 lastGenerationResult = res
 
@@ -120,6 +126,19 @@ class ReelViewModel(application: Application) : AndroidViewModel(application) {
             }
             isGenerating = false
             onComplete()
+        }
+    }
+
+    fun runModelProbe() {
+        isRunningProbe = true
+        viewModelScope.launch {
+            try {
+                modelProbeResult = AiGenerator.runModelProbe(getApplication(), selectedApiKey)
+            } catch (e: Exception) {
+                Log.e("ReelViewModel", "Model probe failed", e)
+            } finally {
+                isRunningProbe = false
+            }
         }
     }
 
