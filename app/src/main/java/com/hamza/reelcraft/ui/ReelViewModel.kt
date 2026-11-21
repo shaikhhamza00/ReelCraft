@@ -94,7 +94,7 @@ class ReelViewModel(application: Application) : AndroidViewModel(application) {
                 val allowFallback = forceOffline || geminiConsecutiveFailures >= 1
                 val res = AiGenerator.generateSlidesForTopic(
                     context = getApplication(),
-                    niche = selectedNiche,
+                    nicheInput = selectedNiche,
                     topic = topicText,
                     apiKey = selectedApiKey,
                     language = selectedLanguage,
@@ -162,7 +162,7 @@ class ReelViewModel(application: Application) : AndroidViewModel(application) {
                 val testTopic = if (topicText.isNotBlank()) topicText else "Bhoot wali purani haveli"
                 fullScriptTestResult = AiGenerator.generateSlidesForTopic(
                     context = getApplication(),
-                    niche = selectedNiche,
+                    nicheInput = selectedNiche,
                     topic = testTopic,
                     apiKey = selectedApiKey,
                     language = selectedLanguage,

@@ -38,7 +38,14 @@ data class ThemePreviewItem(
 
 data class ScriptDebugItem(
     val topic: String,
+    val niche: String,
     val slides: List<SlideData>,
+    val modelUsed: String?,
+    val pass1Ms: Long,
+    val pass2Ms: Long,
+    val pass2Used: Boolean,
+    val totalMs: Long,
+    val usedOffline: Boolean,
     val statusMsg: String? = null
 )
 
@@ -98,9 +105,10 @@ fun ThemeTestScreen(onBack: () -> Unit) {
 
             for (t in newTopics) {
                 try {
+                    val niche = AiGenerator.detectNicheForTopic(t)
                     val res = AiGenerator.generateSlidesForTopic(
                         context = context,
-                        niche = t,
+                        nicheInput = niche,
                         topic = t,
                         apiKey = activeKey,
                         allowOfflineFallback = true
@@ -108,11 +116,37 @@ fun ThemeTestScreen(onBack: () -> Unit) {
                     val statusStr = if (res.usedOffline) {
                         "Offline script: ${res.errorMessage ?: "API Key missing"}"
                     } else {
-                        "Generated via ${res.modelUsed} (${res.latencyMs}ms)"
+                        "Model: ${res.modelUsed} | Pass1: ${res.pass1Ms}ms | Pass2: ${if (res.pass2Used) "${res.pass2Ms}ms" else "Off"} | Total: ${res.latencyMs}ms"
                     }
-                    scriptList.add(ScriptDebugItem(t, res.slides, statusStr))
+                    scriptList.add(
+                        ScriptDebugItem(
+                            topic = t,
+                            niche = niche,
+                            slides = res.slides,
+                            modelUsed = res.modelUsed,
+                            pass1Ms = res.pass1Ms,
+                            pass2Ms = res.pass2Ms,
+                            pass2Used = res.pass2Used,
+                            totalMs = res.latencyMs,
+                            usedOffline = res.usedOffline,
+                            statusMsg = statusStr
+                        )
+                    )
                 } catch (e: Exception) {
-                    scriptList.add(ScriptDebugItem(t, emptyList(), "Error: ${e.message}"))
+                    scriptList.add(
+                        ScriptDebugItem(
+                            topic = t,
+                            niche = AiGenerator.detectNicheForTopic(t),
+                            slides = emptyList(),
+                            modelUsed = null,
+                            pass1Ms = 0,
+                            pass2Ms = 0,
+                            pass2Used = false,
+                            totalMs = 0,
+                            usedOffline = true,
+                            statusMsg = "Error: ${e.message}"
+                        )
+                    )
                 }
             }
         }
@@ -123,7 +157,7 @@ fun ThemeTestScreen(onBack: () -> Unit) {
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Debug & Theme Test Screen") },
+                title = { Text("Debug & Script Quality Test") },
                 navigationIcon = {
                     TextButton(onClick = onBack) { Text("Back", color = Color.White) }
                 },
@@ -150,7 +184,7 @@ fun ThemeTestScreen(onBack: () -> Unit) {
                 Tab(
                     selected = selectedTab == 1,
                     onClick = { selectedTab = 1 },
-                    text = { Text("Script Debug (6 New Topics)", color = if (selectedTab == 1) Color.Cyan else Color.LightGray) }
+                    text = { Text("Script Debug (6 Topics)", color = if (selectedTab == 1) Color.Cyan else Color.LightGray) }
                 )
             }
 
@@ -224,7 +258,11 @@ fun ThemeTestScreen(onBack: () -> Unit) {
 
                 if (scriptDebugItems.isEmpty()) {
                     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                        CircularProgressIndicator(color = Color.Cyan)
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            CircularProgressIndicator(color = Color.Cyan)
+                            Spacer(modifier = Modifier.height(12.dp))
+                            Text("Generating scripts with Pass 1 + Pass 2 refinement...", color = Color.LightGray, fontSize = 13.sp)
+                        }
                     }
                 } else {
                     LazyColumn(
@@ -242,39 +280,92 @@ fun ThemeTestScreen(onBack: () -> Unit) {
                                         .fillMaxWidth()
                                         .padding(14.dp)
                                 ) {
-                                    Text(
-                                        text = "📌 Topic: ${item.topic}",
-                                        fontSize = 16.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        color = Color.Cyan
-                                    )
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Text(
+                                            text = "📌 ${item.topic}",
+                                            fontSize = 16.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = Color.Cyan,
+                                            modifier = Modifier.weight(1f)
+                                        )
+                                        Surface(
+                                            color = Color(0xFF334155),
+                                            shape = MaterialTheme.shapes.small
+                                        ) {
+                                            Text(
+                                                text = item.niche,
+                                                color = Color(0xFFF472B6),
+                                                fontSize = 11.sp,
+                                                fontWeight = FontWeight.Bold,
+                                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                                            )
+                                        }
+                                    }
+
                                     if (!item.statusMsg.isNullOrBlank()) {
+                                        Spacer(modifier = Modifier.height(4.dp))
                                         Text(
                                             text = item.statusMsg,
                                             fontSize = 12.sp,
-                                            color = Color.Yellow
+                                            color = if (item.usedOffline) Color.Yellow else Color(0xFF34D399)
                                         )
                                     }
+
                                     Spacer(modifier = Modifier.height(8.dp))
+
                                     item.slides.forEachIndexed { sIdx, slide ->
                                         HorizontalDivider(color = Color(0xFF334155), thickness = 0.5.dp)
                                         Spacer(modifier = Modifier.height(4.dp))
-                                        Text(
-                                            text = "Slide ${sIdx + 1} [${slide.voiceStyle}]:",
-                                            fontSize = 12.sp,
-                                            color = Color(0xFFA78BFA),
-                                            fontWeight = FontWeight.SemiBold
-                                        )
+
+                                        val wordCount = slide.voiceText.split(" ").filter { it.isNotBlank() }.size
+                                        val bannedFound = AiGenerator.checkForBannedPhrases("${slide.headline} ${slide.body} ${slide.voiceText}")
+
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            horizontalArrangement = Arrangement.SpaceBetween,
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Text(
+                                                text = "Slide ${sIdx + 1} [${slide.templateType.uppercase()} / ${slide.transition}]",
+                                                fontSize = 12.sp,
+                                                color = Color(0xFFA78BFA),
+                                                fontWeight = FontWeight.SemiBold
+                                            )
+                                            Text(
+                                                text = if (bannedFound != null) "⚠️ Banned: '$bannedFound'" else "✅ Clean",
+                                                fontSize = 11.sp,
+                                                color = if (bannedFound != null) Color(0xFFEF4444) else Color(0xFF34D399),
+                                                fontWeight = FontWeight.Bold
+                                            )
+                                        }
+
                                         Text(
                                             text = "Headline: ${slide.headline}",
                                             fontSize = 13.sp,
-                                            color = Color.White
+                                            color = Color.White,
+                                            fontWeight = FontWeight.Bold
                                         )
                                         Text(
-                                            text = "VoiceText (${slide.voiceText.split(" ").size} words): \"${slide.voiceText}\"",
-                                            fontSize = 13.sp,
-                                            color = Color(0xFF34D399)
+                                            text = "Body: ${slide.body}",
+                                            fontSize = 12.sp,
+                                            color = Color.LightGray
                                         )
+                                        Text(
+                                            text = "VoiceText ($wordCount words): \"${slide.voiceText}\"",
+                                            fontSize = 13.sp,
+                                            color = if (wordCount in 8..15) Color(0xFF34D399) else Color(0xFFFACC15)
+                                        )
+                                        if (slide.emphasisWords.isNotEmpty()) {
+                                            Text(
+                                                text = "Emphasis: ${slide.emphasisWords.joinToString(", ")} | Style: ${slide.voiceStyle}",
+                                                fontSize = 11.sp,
+                                                color = Color(0xFF38BDF8)
+                                            )
+                                        }
                                         Spacer(modifier = Modifier.height(4.dp))
                                     }
                                 }

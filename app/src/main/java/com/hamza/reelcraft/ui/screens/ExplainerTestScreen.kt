@@ -55,7 +55,7 @@ fun ExplainerTestScreen(onBack: () -> Unit) {
                 }
                 val res = AiGenerator.generateSlidesForTopic(
                     context = context,
-                    niche = selectedNiche,
+                    nicheInput = selectedNiche,
                     topic = topicInput,
                     apiKey = activeKey,
                     allowOfflineFallback = true
@@ -159,7 +159,7 @@ fun ExplainerTestScreen(onBack: () -> Unit) {
                             }
                             val res = AiGenerator.generateSlidesForTopic(
                                 context = context,
-                                niche = selectedNiche,
+                                nicheInput = selectedNiche,
                                 topic = topicInput,
                                 apiKey = activeKey,
                                 allowOfflineFallback = true
